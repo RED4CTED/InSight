@@ -1,0 +1,10 @@
+#screenshot-overlay {
+    cursor: crosshair !important;
+  }
+  
+  #selection-box {
+    border: 2px dashed #fff !important;
+    background-color: rgba(66, 133, 244, 0.1) !important;
+    position: fixed !important;
+    z-index: 2147483648 !important;
+  }
