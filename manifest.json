@@ -11,8 +11,6 @@
   ],
   "host_permissions": [
     "*://*/*",
-    "https://api.ocr.space/*",
-    "https://api.openai.com/*",
     "<all_urls>"
   ],
   "action": {

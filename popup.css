@@ -1,6 +1,6 @@
 body {
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-  width: 440px;
+  width: 460px;
   margin: 0;
   padding: 0;
   color: #333;
@@ -34,6 +34,20 @@ body {
 h2 {
   font-size: 16px;
   margin: 15px 0 10px;
+  color: #5f6368;
+  font-weight: 500;
+}
+
+h3 {
+  font-size: 14px;
+  margin: 12px 0 8px;
+  color: #5f6368;
+  font-weight: 500;
+}
+
+h4 {
+  font-size: 13px;
+  margin: 10px 0 5px;
   color: #5f6368;
   font-weight: 500;
 }
@@ -80,7 +94,8 @@ h2 {
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
 }
 
-.action-button svg {
+.button-icon {
+  display: inline-flex;
   margin-right: 8px;
 }
 
@@ -185,11 +200,6 @@ h2 {
   margin: 8px 0;
 }
 
-.button-icon {
-  display: inline-flex;
-  margin-right: 8px;
-}
-
 /* For the capture area instruction overlay */
 .instructions-overlay {
   position: fixed;
@@ -203,113 +213,6 @@ h2 {
   z-index: 2147483649;
 }
 
-/* Dark mode support */
-@media (prefers-color-scheme: dark) {
-  body {
-    background-color: #292a2d;
-    color: #e8eaed;
-  }
-  
-  .header {
-    border-bottom-color: #3c4043;
-  }
-  
-  .header h1 {
-    color: #8ab4f8;
-  }
-  
-  .result-container {
-    background-color: #202124;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
-  }
-  
-  .result {
-    background-color: #292a2d;
-    border-color: #3c4043;
-    color: #e8eaed;
-  }
-  
-  .preview-image-container {
-    background-color: #292a2d;
-    border-color: #3c4043;
-  }
-  
-  h2 {
-    color: #9aa0a6;
-  }
-  
-  .info-text {
-    color: #9aa0a6;
-  }
-  
-  .status {
-    color: #9aa0a6;
-  }
-  
-  .action-button.secondary {
-    background-color: #3c4043;
-    color: #e8eaed;
-    border-color: #5f6368;
-  }
-  
-  .action-button.secondary:hover {
-    background-color: #4a4d51;
-  }
-}
-.settings-section {
-  margin-bottom: 20px;
-  padding-bottom: 15px;
-  border-bottom: 1px solid #e0e0e0;
-}
-
-.radio-group {
-  display: flex;
-  gap: 15px;
-  margin-bottom: 10px;
-}
-
-.radio-option {
-  display: flex;
-  align-items: center;
-  font-size: 14px;
-  cursor: pointer;
-}
-
-.radio-option input {
-  margin-right: 6px;
-}
-
-#apiKeyContainer {
-  display: flex;
-  gap: 8px;
-  margin-top: 8px;
-}
-
-#apiKeyInput {
-  flex: 1;
-  padding: 8px;
-  border: 1px solid #dadce0;
-  border-radius: 4px;
-  font-size: 13px;
-}
-
-.action-button.small {
-  padding: 6px 12px;
-  font-size: 13px;
-}
-
-/* Dark mode support for new elements */
-@media (prefers-color-scheme: dark) {
-  .settings-section {
-    border-bottom-color: #3c4043;
-  }
-  
-  #apiKeyInput {
-    background-color: #292a2d;
-    border-color: #3c4043;
-    color: #e8eaed;
-  }
-}
 .tabs {
   display: flex;
   border-bottom: 1px solid #dadce0;
@@ -358,6 +261,7 @@ h2 {
 
 .radio-group {
   display: flex;
+  flex-wrap: wrap;
   gap: 15px;
   margin-bottom: 10px;
 }
@@ -378,15 +282,10 @@ h2 {
   gap: 8px;
   margin-top: 8px;
   margin-bottom: 8px;
+  align-items: center;
 }
 
-#apiKeyContainer {
-  display: flex;
-  gap: 8px;
-  margin-top: 8px;
-}
-
-#apiKeyInput, #openaiApiKeyInput {
+.input-group input, .input-group select {
   flex: 1;
   padding: 8px;
   border: 1px solid #dadce0;
@@ -427,6 +326,49 @@ h2 {
   overflow-y: auto;
   line-height: 1.6;
   font-size: 14px;
+}
+
+/* Headers list styling */
+.headers-list {
+  margin: 10px 0;
+  max-height: 100px;
+  overflow-y: auto;
+  border: 1px solid #dadce0;
+  border-radius: 4px;
+  padding: 5px;
+  background-color: #f8f9fa;
+}
+
+.header-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 5px;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.header-item:last-child {
+  border-bottom: none;
+}
+
+.header-name {
+  font-weight: 500;
+  margin-right: 8px;
+}
+
+.header-value {
+  color: #5f6368;
+  flex: 1;
+  word-break: break-all;
+}
+
+.remove-header {
+  background: none;
+  border: none;
+  color: #d93025;
+  cursor: pointer;
+  padding: 2px 5px;
+  margin-left: 5px;
 }
 
 /* Markdown formatting for AI responses */
@@ -509,39 +451,63 @@ h2 {
   margin-bottom: 5px;
 }
 
-/* Dark mode support for new elements */
+/* Dark mode support */
 @media (prefers-color-scheme: dark) {
-  .tabs {
+  body {
+    background-color: #292a2d;
+    color: #e8eaed;
+  }
+  
+  .header {
     border-bottom-color: #3c4043;
   }
   
-  .tab-button {
-    color: #9aa0a6;
-  }
-  
-  .tab-button:hover {
+  .header h1, .tab-button.active, .tab-button:hover {
     color: #8ab4f8;
   }
   
   .tab-button.active {
-    color: #8ab4f8;
     border-bottom-color: #8ab4f8;
   }
   
-  .settings-group {
-    border-bottom-color: #3c4043;
+  .result-container {
+    background-color: #202124;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
   }
   
-  #apiKeyInput, #openaiApiKeyInput {
+  .result, .result-editor, .headers-list {
     background-color: #292a2d;
     border-color: #3c4043;
     color: #e8eaed;
   }
   
-  .result-editor {
+  .preview-image-container {
+    background-color: #292a2d;
+    border-color: #3c4043;
+  }
+  
+  h2, h3, h4, .info-text, .status, .tab-button, .header-value {
+    color: #9aa0a6;
+  }
+  
+  .action-button.secondary {
+    background-color: #3c4043;
+    color: #e8eaed;
+    border-color: #5f6368;
+  }
+  
+  .action-button.secondary:hover {
+    background-color: #4a4d51;
+  }
+  
+  .input-group input, .input-group select {
     background-color: #292a2d;
     border-color: #3c4043;
     color: #e8eaed;
+  }
+  
+  .tabs, .settings-group, .header-item {
+    border-color: #3c4043;
   }
   
   #ai-response code {
@@ -566,45 +532,36 @@ h2 {
     color: #8ab4f8;
   }
 }
-
-.settings-group h3 {
-  font-size: 14px;
-  margin: 12px 0 8px;
-  color: #5f6368;
-  font-weight: 500;
+/* Math notation styles */
+.math-inline {
+  font-family: 'Times New Roman', serif;
+  font-style: italic;
+  padding: 0 4px;
+  white-space: nowrap;
 }
 
-/* Settings containers */
-#localServerContainer {
-  margin-top: 12px;
-  padding-top: 8px;
-  border-top: 1px solid #ebebeb;
+.math-display {
+  font-family: 'Times New Roman', serif;
+  font-style: italic;
+  padding: 10px 0;
+  text-align: center;
+  font-size: 1.1em;
 }
 
-/* Server URL input styling */
-#serverUrlInput {
-  flex: 1;
-  padding: 8px;
-  border: 1px solid #dadce0;
-  border-radius: 4px;
-  font-size: 13px;
-  width: 100%;
-  box-sizing: border-box;
+.math-inline sup, .math-display sup {
+  vertical-align: super;
+  font-size: 0.8em;
+  line-height: 0;
 }
 
-/* Dark mode support for new elements */
+.math-inline sub, .math-display sub {
+  vertical-align: sub;
+  font-size: 0.8em;
+  line-height: 0;
+}
+
 @media (prefers-color-scheme: dark) {
-  .settings-group h3 {
-    color: #9aa0a6;
-  }
-  
-  #localServerContainer {
-    border-top-color: #3c4043;
-  }
-  
-  #serverUrlInput {
-    background-color: #45464b;
-    border-color: #3c4043;
+  .math-inline, .math-display {
     color: #e8eaed;
   }
 }

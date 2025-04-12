@@ -25,7 +25,10 @@
   ],
   "web_accessible_resources": [
     "html2canvas.min.js",
-    "browser-polyfill.js"
+    "browser-polyfill.js",
+    "popup.js",
+    "detect-browser.js",
+    "script-loader.js"
   ],
   "browser_specific_settings": {
     "gecko": {

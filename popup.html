@@ -60,31 +60,153 @@
               <input type="radio" name="ocrService" value="ocrspace"> 
               OCR.space API
             </label>
+            <label class="radio-option">
+              <input type="radio" name="ocrService" value="custom"> 
+              Custom API
+            </label>
           </div>
-            <!-- Add local server URL input section -->
-            <div id="localServerContainer">
-              <h3>Local Server Settings</h3>
-              <p class="info-text">Include the full URL with protocol (http:// or https://)</p>
-              <div class="input-group">
-                <input type="text" id="serverUrlInput" placeholder="Enter local server URL (e.g., http://localhost:8000)">
-                <button id="saveServerUrlBtn" class="action-button secondary small">Save</button>
-              </div>
-              
+          
+          <!-- Local server settings -->
+          <div id="localServerContainer">
+            <h3>Local Server Settings</h3>
+            <p class="info-text">Include the full URL with protocol (http:// or https://)</p>
+            <div class="input-group">
+              <input type="text" id="serverUrlInput" placeholder="Enter local server URL (e.g., http://localhost:8000)">
+              <button id="saveServerUrlBtn" class="action-button secondary small">Save</button>
             </div>
+          </div>
+          
+          <!-- OCR.space API settings -->
           <div id="apiKeyContainer" class="hidden">
-            <input type="password" id="apiKeyInput" placeholder="Enter OCR.space API Key">
-            <button id="saveApiKeyBtn" class="action-button secondary small">Save</button>
+            <h3>OCR.space API Settings</h3>
+            <div class="input-group">
+              <input type="password" id="apiKeyInput" placeholder="Enter OCR.space API Key">
+              <button id="saveApiKeyBtn" class="action-button secondary small">Save</button>
+            </div>
+          </div>
+          
+          <!-- Custom OCR API settings -->
+          <div id="customOcrContainer" class="hidden">
+            <h3>Custom OCR API Settings</h3>
+            <div class="input-group">
+              <input type="text" id="customOcrUrlInput" placeholder="Enter API endpoint URL">
+            </div>
+            <h4>Request Headers</h4>
+            <div class="input-group">
+              <input type="text" id="customOcrHeaderKeyInput" placeholder="Header name (e.g., Authorization)">
+              <input type="text" id="customOcrHeaderValueInput" placeholder="Header value">
+              <button id="addOcrHeaderBtn" class="action-button secondary small">Add</button>
+            </div>
+            <div id="customOcrHeadersList" class="headers-list">
+              <!-- Headers will be added here dynamically -->
+            </div>
+            <h4>Image Format</h4>
+            <div class="radio-group">
+              <label class="radio-option">
+                <input type="radio" name="customOcrImageFormat" value="base64" checked> 
+                Base64 string
+              </label>
+              <label class="radio-option">
+                <input type="radio" name="customOcrImageFormat" value="formData"> 
+                Form Data
+              </label>
+            </div>
+            <div class="input-group">
+              <input type="text" id="customOcrParamNameInput" placeholder="Form data parameter name or JSON field name">
+            </div>
+            <h4>Response Format</h4>
+            <div class="input-group">
+              <input type="text" id="customOcrResponsePathInput" placeholder="JSON path to text (e.g., results.text)">
+            </div>
+            <div class="button-row">
+              <button id="saveCustomOcrBtn" class="action-button secondary">Save OCR Settings</button>
+              <button id="testCustomOcrBtn" class="action-button">Test</button>
+            </div>
           </div>
         </div>
         
-        <!-- OpenAI API settings -->
+        <!-- AI API settings -->
         <div class="settings-group">
-          <h2>OpenAI API</h2>
-          <div class="input-group">
-            <input type="password" id="openaiApiKeyInput" placeholder="Enter OpenAI API Key">
-            <button id="saveOpenaiApiKeyBtn" class="action-button secondary small">Save</button>
+          <h2>AI Service</h2>
+          <div class="radio-group">
+            <label class="radio-option">
+              <input type="radio" name="aiService" value="openai" checked> 
+              OpenAI API
+            </label>
+            <label class="radio-option">
+              <input type="radio" name="aiService" value="local"> 
+              Local Server
+            </label>
+            <label class="radio-option">
+              <input type="radio" name="aiService" value="custom"> 
+              Custom API
+            </label>
           </div>
-          <p class="info-text">Your API key is stored locally on your device.</p>
+          
+          <!-- OpenAI API settings -->
+          <div id="openaiContainer">
+            <h3>OpenAI API Settings</h3>
+            <div class="input-group">
+              <input type="password" id="openaiApiKeyInput" placeholder="Enter OpenAI API Key">
+            </div>
+            <h4>Model</h4>
+            <div class="input-group">
+              <select id="openaiModelSelect">
+                <option value="gpt-4o-mini-2024-07-18">GPT-4o Mini</option>
+                <option value="gpt-4o">GPT-4o</option>
+                <option value="gpt-3.5-turbo">GPT-3.5 Turbo</option>
+                <option value="gpt-4">GPT-4</option>
+              </select>
+            </div>
+            <div class="button-row">
+              <button id="saveOpenaiApiKeyBtn" class="action-button secondary">Save OpenAI Settings</button>
+            </div>
+          </div>
+          
+          <!-- Local AI server settings -->
+          <div id="localAiServerContainer" class="hidden">
+            <h3>Local AI Server Settings</h3>
+            <p class="info-text">Include the full URL with protocol (http:// or https://)</p>
+            <div class="input-group">
+              <input type="text" id="aiServerUrlInput" placeholder="Enter local AI server URL">
+            </div>
+            <h4>Model</h4>
+            <div class="input-group">
+              <input type="text" id="localAiModelInput" placeholder="Model name (if required)">
+            </div>
+            <div class="button-row">
+              <button id="saveAiServerUrlBtn" class="action-button secondary">Save Local AI Settings</button>
+            </div>
+          </div>
+          
+          <!-- Custom AI API settings -->
+          <div id="customAiContainer" class="hidden">
+            <h3>Custom AI API Settings</h3>
+            <div class="input-group">
+              <input type="text" id="customAiUrlInput" placeholder="Enter API endpoint URL">
+            </div>
+            <h4>Request Headers</h4>
+            <div class="input-group">
+              <input type="text" id="customAiHeaderKeyInput" placeholder="Header name (e.g., Authorization)">
+              <input type="text" id="customAiHeaderValueInput" placeholder="Header value">
+              <button id="addAiHeaderBtn" class="action-button secondary small">Add</button>
+            </div>
+            <div id="customAiHeadersList" class="headers-list">
+              <!-- Headers will be added here dynamically -->
+            </div>
+            <h4>Request Format</h4>
+            <div class="input-group">
+              <input type="text" id="customAiBodyTemplateInput" placeholder='Request body template (use {{text}} as placeholder, e.g., {"prompt": "{{text}}"})'>
+            </div>
+            <h4>Response Format</h4>
+            <div class="input-group">
+              <input type="text" id="customAiResponsePathInput" placeholder="JSON path to response (e.g., choices[0].message.content)">
+            </div>
+            <div class="button-row">
+              <button id="saveCustomAiBtn" class="action-button secondary">Save AI Settings</button>
+              <button id="testCustomAiBtn" class="action-button">Test</button>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -125,7 +247,7 @@
           Clear
         </button>
         
-        <button id="sendToOpenaiBtn" class="action-button" disabled>
+        <button id="sendToAiBtn" class="action-button" disabled>
           <span class="button-icon">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <line x1="22" y1="2" x2="11" y2="13"></line>

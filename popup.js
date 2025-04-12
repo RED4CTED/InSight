@@ -24,43 +24,59 @@ function initializePopup() {
   const apiKeyContainer = document.getElementById('apiKeyContainer');
   const apiKeyInput = document.getElementById('apiKeyInput');
   const saveApiKeyBtn = document.getElementById('saveApiKeyBtn');
+  const localServerContainer = document.getElementById('localServerContainer');
+  const customOcrContainer = document.getElementById('customOcrContainer');
   
-  // New server URL elements
+  // Local server elements
   const serverUrlInput = document.getElementById('serverUrlInput');
   const saveServerUrlBtn = document.getElementById('saveServerUrlBtn');
   
+  // Custom OCR API elements
+  const customOcrUrlInput = document.getElementById('customOcrUrlInput');
+  const customOcrHeaderKeyInput = document.getElementById('customOcrHeaderKeyInput');
+  const customOcrHeaderValueInput = document.getElementById('customOcrHeaderValueInput');
+  const addOcrHeaderBtn = document.getElementById('addOcrHeaderBtn');
+  const customOcrHeadersList = document.getElementById('customOcrHeadersList');
+  const customOcrImageFormatRadios = document.querySelectorAll('input[name="customOcrImageFormat"]');
+  const customOcrParamNameInput = document.getElementById('customOcrParamNameInput');
+  const customOcrResponsePathInput = document.getElementById('customOcrResponsePathInput');
+  const saveCustomOcrBtn = document.getElementById('saveCustomOcrBtn');
+  const testCustomOcrBtn = document.getElementById('testCustomOcrBtn');
+  
+  // AI service elements
+  const aiServiceRadios = document.querySelectorAll('input[name="aiService"]');
+  const openaiContainer = document.getElementById('openaiContainer');
+  const localAiServerContainer = document.getElementById('localAiServerContainer');
+  const customAiContainer = document.getElementById('customAiContainer');
+  
   // OpenAI API elements
   const openaiApiKeyInput = document.getElementById('openaiApiKeyInput');
+  const openaiModelSelect = document.getElementById('openaiModelSelect');
   const saveOpenaiApiKeyBtn = document.getElementById('saveOpenaiApiKeyBtn');
-  const sendToOpenaiBtn = document.getElementById('sendToOpenaiBtn');
+  
+  // Local AI server elements
+  const aiServerUrlInput = document.getElementById('aiServerUrlInput');
+  const localAiModelInput = document.getElementById('localAiModelInput');
+  const saveAiServerUrlBtn = document.getElementById('saveAiServerUrlBtn');
+  
+  // Custom AI API elements
+  const customAiUrlInput = document.getElementById('customAiUrlInput');
+  const customAiHeaderKeyInput = document.getElementById('customAiHeaderKeyInput');
+  const customAiHeaderValueInput = document.getElementById('customAiHeaderValueInput');
+  const addAiHeaderBtn = document.getElementById('addAiHeaderBtn');
+  const customAiHeadersList = document.getElementById('customAiHeadersList');
+  const customAiBodyTemplateInput = document.getElementById('customAiBodyTemplateInput');
+  const customAiResponsePathInput = document.getElementById('customAiResponsePathInput');
+  const saveCustomAiBtn = document.getElementById('saveCustomAiBtn');
+  const testCustomAiBtn = document.getElementById('testCustomAiBtn');
+  
+  // Send to AI button (renamed from sendToOpenaiBtn)
+  const sendToAiBtn = document.getElementById('sendToAiBtn');
   const aiResponseContainer = document.getElementById('ai-response-container');
   const aiResponseDiv = document.getElementById('ai-response');
   
   console.log('Popup loaded');
   
-  // Log the presence of our UI elements for debugging
-  console.log('OCR service radios found:', ocrServiceRadios?.length > 0);
-  console.log('API key container found:', apiKeyContainer !== null);
-  console.log('Server URL input found:', serverUrlInput !== null);
-  console.log('OpenAI API key input found:', openaiApiKeyInput !== null);
-  console.log('Send to OpenAI button found:', sendToOpenaiBtn !== null);
-
-  // Tab switching functionality
-  tabButtons.forEach(button => {
-    button.addEventListener('click', function() {
-      // Get the tab to show
-      const tabId = this.getAttribute('data-tab');
-      
-      // Update active state on buttons
-      tabButtons.forEach(btn => btn.classList.remove('active'));
-      this.classList.add('active');
-      
-      // Hide all panes and show the selected one
-      tabPanes.forEach(pane => pane.classList.remove('active'));
-      document.getElementById(`${tabId}-tab`).classList.add('active');
-    });
-  });
-
   // Helper function to show/hide elements
   function showElement(element, visible) {
     if (element) {
@@ -150,34 +166,180 @@ function initializePopup() {
     });
   }
 
+  // Tab switching functionality
+  tabButtons.forEach(button => {
+    button.addEventListener('click', function() {
+      // Get the tab to show
+      const tabId = this.getAttribute('data-tab');
+      
+      // Update active state on buttons
+      tabButtons.forEach(btn => btn.classList.remove('active'));
+      this.classList.add('active');
+      
+      // Hide all panes and show the selected one
+      tabPanes.forEach(pane => pane.classList.remove('active'));
+      document.getElementById(`${tabId}-tab`).classList.add('active');
+    });
+  });
+
+  // Helper function to load OCR settings UI based on selected service
+  function updateOcrUi(service) {
+    if (localServerContainer) showElement(localServerContainer, service === 'local');
+    if (apiKeyContainer) showElement(apiKeyContainer, service === 'ocrspace');
+    if (customOcrContainer) showElement(customOcrContainer, service === 'custom');
+  }
+
+  // Helper function to load AI settings UI based on selected service
+  function updateAiUi(service) {
+    if (openaiContainer) showElement(openaiContainer, service === 'openai');
+    if (localAiServerContainer) showElement(localAiServerContainer, service === 'local');
+    if (customAiContainer) showElement(customAiContainer, service === 'custom');
+  }
+
+  // Helper function to add a header to a headers list
+  function addHeaderToList(container, key, value) {
+    if (!container) return;
+    
+    const headerItem = document.createElement('div');
+    headerItem.className = 'header-item';
+    headerItem.innerHTML = `
+      <span class="header-name">${key}:</span>
+      <span class="header-value">${value}</span>
+      <button class="remove-header">×</button>
+    `;
+    
+    // Add remove functionality
+    headerItem.querySelector('.remove-header').addEventListener('click', function() {
+      headerItem.remove();
+    });
+    
+    container.appendChild(headerItem);
+  }
+
+  // Helper function to get all headers from a header list
+  function getHeadersFromList(container) {
+    const headers = {};
+    if (!container) return headers;
+    
+    const headerItems = container.querySelectorAll('.header-item');
+    headerItems.forEach(item => {
+      const name = item.querySelector('.header-name').textContent.replace(':', '').trim();
+      const value = item.querySelector('.header-value').textContent.trim();
+      headers[name] = value;
+    });
+    
+    return headers;
+  }
+
+  // Helper function to populate headers list from stored headers
+  function populateHeadersList(container, headers) {
+    if (!container) return;
+    
+    // Clear existing headers
+    container.innerHTML = '';
+    
+    // Add each header
+    if (headers && typeof headers === 'object') {
+      Object.keys(headers).forEach(key => {
+        addHeaderToList(container, key, headers[key]);
+      });
+    }
+  }
+
   // Load settings from storage
-  storageGet(['ocrService', 'ocrspaceApiKey', 'openaiApiKey', 'serverUrl']).then(function(result) {
+  storageGet([
+    'ocrService', 
+    'ocrspaceApiKey', 
+    'serverUrl',
+    'customOcrSettings',
+    'aiService',
+    'openaiSettings',
+    'localAiSettings',
+    'customAiSettings'
+  ]).then(function(result) {
     // Set default OCR service if not saved
     const ocrService = result.ocrService || 'local';
     
-    // Set the radio button if it exists
-    const radioToCheck = document.querySelector(`input[name="ocrService"][value="${ocrService}"]`);
-    if (radioToCheck) {
-      radioToCheck.checked = true;
+    // Set the OCR radio button if it exists
+    const ocrRadioToCheck = document.querySelector(`input[name="ocrService"][value="${ocrService}"]`);
+    if (ocrRadioToCheck) {
+      ocrRadioToCheck.checked = true;
     }
     
-    // Show API key input if OCR.space is selected and the container exists
-    if (apiKeyContainer) {
-      showElement(apiKeyContainer, ocrService === 'ocrspace');
+    // Update OCR UI based on selected service
+    updateOcrUi(ocrService);
+    
+    // Set default AI service if not saved
+    const aiService = result.aiService || 'openai';
+    
+    // Set the AI radio button if it exists
+    const aiRadioToCheck = document.querySelector(`input[name="aiService"][value="${aiService}"]`);
+    if (aiRadioToCheck) {
+      aiRadioToCheck.checked = true;
     }
     
-    // Set API keys and server URL if saved
+    // Update AI UI based on selected service
+    updateAiUi(aiService);
+    
+    // Set OCR.space API key if saved
     if (result.ocrspaceApiKey && apiKeyInput) {
       apiKeyInput.value = result.ocrspaceApiKey;
-    }
-    
-    if (result.openaiApiKey && openaiApiKeyInput) {
-      openaiApiKeyInput.value = result.openaiApiKey;
     }
     
     // Set server URL or default to localhost if not set
     if (serverUrlInput) {
       serverUrlInput.value = result.serverUrl || 'http://localhost:8000';
+    }
+    
+    // Load custom OCR settings if saved
+    if (result.customOcrSettings && customOcrUrlInput) {
+      const customOcr = result.customOcrSettings;
+      
+      customOcrUrlInput.value = customOcr.url || '';
+      customOcrParamNameInput.value = customOcr.paramName || '';
+      customOcrResponsePathInput.value = customOcr.responsePath || '';
+      
+      // Set image format radio
+      const formatRadio = document.querySelector(`input[name="customOcrImageFormat"][value="${customOcr.imageFormat || 'base64'}"]`);
+      if (formatRadio) formatRadio.checked = true;
+      
+      // Populate headers list
+      populateHeadersList(customOcrHeadersList, customOcr.headers);
+    }
+    
+    // Load OpenAI settings if saved
+    if (result.openaiSettings && openaiApiKeyInput) {
+      const openai = result.openaiSettings;
+      
+      openaiApiKeyInput.value = openai.apiKey || '';
+      
+      // Set model if saved and exists in dropdown
+      if (openai.model && openaiModelSelect) {
+        const option = openaiModelSelect.querySelector(`option[value="${openai.model}"]`);
+        if (option) {
+          openaiModelSelect.value = openai.model;
+        }
+      }
+    }
+    
+    // Load local AI settings if saved
+    if (result.localAiSettings && aiServerUrlInput) {
+      const localAi = result.localAiSettings;
+      
+      aiServerUrlInput.value = localAi.url || '';
+      localAiModelInput.value = localAi.model || '';
+    }
+    
+    // Load custom AI settings if saved
+    if (result.customAiSettings && customAiUrlInput) {
+      const customAi = result.customAiSettings;
+      
+      customAiUrlInput.value = customAi.url || '';
+      customAiBodyTemplateInput.value = customAi.bodyTemplate || '';
+      customAiResponsePathInput.value = customAi.responsePath || '';
+      
+      // Populate headers list
+      populateHeadersList(customAiHeadersList, customAi.headers);
     }
   }).catch(error => {
     console.error('Error loading settings:', error);
@@ -190,7 +352,7 @@ function initializePopup() {
       resultTextarea.value = result.extractedText;
       if (copyBtn) copyBtn.disabled = false;
       if (clearBtn) clearBtn.disabled = false;
-      if (sendToOpenaiBtn) sendToOpenaiBtn.disabled = false;
+      if (sendToAiBtn) sendToAiBtn.disabled = false;
       
       // Also check for a saved preview image
       storageGet(['previewImage']).then(function(result) {
@@ -243,10 +405,25 @@ function initializePopup() {
           console.error('Error saving OCR service:', error);
         });
         
-        // Show/hide API key input
-        if (apiKeyContainer) {
-          showElement(apiKeyContainer, selectedService === 'ocrspace');
-        }
+        // Update UI based on selection
+        updateOcrUi(selectedService);
+      });
+    });
+  }
+  
+  // Handle AI service selection change
+  if (aiServiceRadios && aiServiceRadios.length > 0) {
+    aiServiceRadios.forEach(radio => {
+      radio.addEventListener('change', function() {
+        const selectedService = this.value;
+        
+        // Save the selection to storage
+        storageSet({aiService: selectedService}).catch(error => {
+          console.error('Error saving AI service:', error);
+        });
+        
+        // Update UI based on selection
+        updateAiUi(selectedService);
       });
     });
   }
@@ -295,21 +472,292 @@ function initializePopup() {
     });
   }
   
-  // Handle OpenAI API key save
-  if (saveOpenaiApiKeyBtn && openaiApiKeyInput) {
+  // Handle custom OCR headers
+  if (addOcrHeaderBtn && customOcrHeaderKeyInput && customOcrHeaderValueInput && customOcrHeadersList) {
+    addOcrHeaderBtn.addEventListener('click', function() {
+      const key = customOcrHeaderKeyInput.value.trim();
+      const value = customOcrHeaderValueInput.value.trim();
+      
+      if (key && value) {
+        addHeaderToList(customOcrHeadersList, key, value);
+        
+        // Clear inputs
+        customOcrHeaderKeyInput.value = '';
+        customOcrHeaderValueInput.value = '';
+      } else {
+        updateStatus('Please enter both header name and value', 'error');
+      }
+    });
+  }
+  
+  // Handle custom OCR settings save
+  if (saveCustomOcrBtn && customOcrUrlInput) {
+    saveCustomOcrBtn.addEventListener('click', function() {
+      const url = customOcrUrlInput.value.trim();
+      
+      // Basic URL validation
+      if (!url) {
+        updateStatus('Please enter a valid API URL', 'error');
+        return;
+      }
+      
+      // Check if URL has protocol
+      if (!url.startsWith('http://') && !url.startsWith('https://')) {
+        updateStatus('URL must start with http:// or https://', 'error');
+        return;
+      }
+      
+      // Get selected image format
+      const imageFormatRadio = document.querySelector('input[name="customOcrImageFormat"]:checked');
+      const imageFormat = imageFormatRadio ? imageFormatRadio.value : 'base64';
+      
+      // Get param name
+      const paramName = customOcrParamNameInput.value.trim();
+      if (!paramName) {
+        updateStatus('Please enter a parameter name for the image', 'error');
+        return;
+      }
+      
+      // Get response path
+      const responsePath = customOcrResponsePathInput.value.trim();
+      if (!responsePath) {
+        updateStatus('Please enter a response path to extract text', 'error');
+        return;
+      }
+      
+      // Get headers
+      const headers = getHeadersFromList(customOcrHeadersList);
+      
+      // Save custom OCR settings
+      const customOcrSettings = {
+        url,
+        imageFormat,
+        paramName,
+        responsePath,
+        headers
+      };
+      
+      storageSet({customOcrSettings}).then(function() {
+        updateStatus('Custom OCR settings saved!', 'success');
+      }).catch(error => {
+        updateStatus('Error saving custom OCR settings: ' + error.message, 'error');
+      });
+    });
+  }
+  
+  // Handle custom OCR test
+  if (testCustomOcrBtn) {
+    testCustomOcrBtn.addEventListener('click', function() {
+      updateStatus('Testing custom OCR API...', '');
+      
+      // Get current settings
+      const url = customOcrUrlInput.value.trim();
+      const imageFormatRadio = document.querySelector('input[name="customOcrImageFormat"]:checked');
+      const imageFormat = imageFormatRadio ? imageFormatRadio.value : 'base64';
+      const paramName = customOcrParamNameInput.value.trim();
+      const responsePath = customOcrResponsePathInput.value.trim();
+      const headers = getHeadersFromList(customOcrHeadersList);
+      
+      // Validate settings
+      if (!url || !paramName || !responsePath) {
+        updateStatus('Please fill in all required fields', 'error');
+        return;
+      }
+      
+      // Check if we have a test image
+      storageGet(['previewImage']).then(function(result) {
+        if (result.previewImage) {
+          // Test with the current preview image
+          const customOcrSettings = {
+            url,
+            imageFormat,
+            paramName,
+            responsePath,
+            headers
+          };
+          
+          extractTextWithCustomApi(result.previewImage, customOcrSettings)
+            .then(text => {
+              updateStatus('Test successful! Result: ' + (text.length > 50 ? text.substring(0, 50) + '...' : text), 'success');
+            })
+            .catch(error => {
+              updateStatus('Test failed: ' + error.message, 'error');
+            });
+        } else {
+          updateStatus('No test image available. Please capture a screenshot first.', 'error');
+        }
+      }).catch(error => {
+        updateStatus('Error getting test image: ' + error.message, 'error');
+      });
+    });
+  }
+  
+  // Handle OpenAI settings save
+  if (saveOpenaiApiKeyBtn && openaiApiKeyInput && openaiModelSelect) {
     saveOpenaiApiKeyBtn.addEventListener('click', function() {
       const apiKey = openaiApiKeyInput.value.trim();
+      const model = openaiModelSelect.value;
       
-      if (apiKey) {
-        // Save API key to storage
-        storageSet({openaiApiKey: apiKey}).then(function() {
-          updateStatus('OpenAI API key saved!', 'success');
-        }).catch(error => {
-          updateStatus('Error saving OpenAI API key: ' + error.message, 'error');
-        });
-      } else {
-        updateStatus('Please enter a valid OpenAI API key', 'error');
+      if (!apiKey) {
+        updateStatus('Please enter a valid API key', 'error');
+        return;
       }
+      
+      // Save OpenAI settings
+      const openaiSettings = {
+        apiKey,
+        model
+      };
+      
+      storageSet({openaiSettings}).then(function() {
+        updateStatus('OpenAI settings saved!', 'success');
+      }).catch(error => {
+        updateStatus('Error saving OpenAI settings: ' + error.message, 'error');
+      });
+    });
+  }
+  
+  // Handle local AI server settings save
+  if (saveAiServerUrlBtn && aiServerUrlInput) {
+    saveAiServerUrlBtn.addEventListener('click', function() {
+      const url = aiServerUrlInput.value.trim();
+      const model = localAiModelInput.value.trim();
+      
+      // Basic URL validation
+      if (!url) {
+        updateStatus('Please enter a valid server URL', 'error');
+        return;
+      }
+      
+      // Check if URL has protocol
+      if (!url.startsWith('http://') && !url.startsWith('https://')) {
+        updateStatus('URL must start with http:// or https://', 'error');
+        return;
+      }
+      
+      // Save local AI settings
+      const localAiSettings = {
+        url,
+        model
+      };
+      
+      storageSet({localAiSettings}).then(function() {
+        updateStatus('Local AI server settings saved!', 'success');
+      }).catch(error => {
+        updateStatus('Error saving local AI settings: ' + error.message, 'error');
+      });
+    });
+  }
+  
+  // Handle custom AI headers
+  if (addAiHeaderBtn && customAiHeaderKeyInput && customAiHeaderValueInput && customAiHeadersList) {
+    addAiHeaderBtn.addEventListener('click', function() {
+      const key = customAiHeaderKeyInput.value.trim();
+      const value = customAiHeaderValueInput.value.trim();
+      
+      if (key && value) {
+        addHeaderToList(customAiHeadersList, key, value);
+        
+        // Clear inputs
+        customAiHeaderKeyInput.value = '';
+        customAiHeaderValueInput.value = '';
+      } else {
+        updateStatus('Please enter both header name and value', 'error');
+      }
+    });
+  }
+  
+  // Handle custom AI settings save
+  if (saveCustomAiBtn && customAiUrlInput) {
+    saveCustomAiBtn.addEventListener('click', function() {
+      const url = customAiUrlInput.value.trim();
+      
+      // Basic URL validation
+      if (!url) {
+        updateStatus('Please enter a valid API URL', 'error');
+        return;
+      }
+      
+      // Check if URL has protocol
+      if (!url.startsWith('http://') && !url.startsWith('https://')) {
+        updateStatus('URL must start with http:// or https://', 'error');
+        return;
+      }
+      
+      // Get body template
+      const bodyTemplate = customAiBodyTemplateInput.value.trim();
+      if (!bodyTemplate) {
+        updateStatus('Please enter a request body template', 'error');
+        return;
+      }
+      
+      // Validate body template
+      if (!bodyTemplate.includes('{{text}}')) {
+        updateStatus('Body template must include {{text}} placeholder', 'error');
+        return;
+      }
+      
+      // Get response path
+      const responsePath = customAiResponsePathInput.value.trim();
+      if (!responsePath) {
+        updateStatus('Please enter a response path to extract text', 'error');
+        return;
+      }
+      
+      // Get headers
+      const headers = getHeadersFromList(customAiHeadersList);
+      
+      // Save custom AI settings
+      const customAiSettings = {
+        url,
+        bodyTemplate,
+        responsePath,
+        headers
+      };
+      
+      storageSet({customAiSettings}).then(function() {
+        updateStatus('Custom AI settings saved!', 'success');
+      }).catch(error => {
+        updateStatus('Error saving custom AI settings: ' + error.message, 'error');
+      });
+    });
+  }
+  
+  // Handle custom AI test
+  if (testCustomAiBtn) {
+    testCustomAiBtn.addEventListener('click', function() {
+      updateStatus('Testing custom AI API...', '');
+      
+      // Get current settings
+      const url = customAiUrlInput.value.trim();
+      const bodyTemplate = customAiBodyTemplateInput.value.trim();
+      const responsePath = customAiResponsePathInput.value.trim();
+      const headers = getHeadersFromList(customAiHeadersList);
+      
+      // Validate settings
+      if (!url || !bodyTemplate || !responsePath) {
+        updateStatus('Please fill in all required fields', 'error');
+        return;
+      }
+      
+      // Create test message
+      const testMessage = "This is a test message to verify the custom API integration.";
+      
+      // Test AI API
+      const customAiSettings = {
+        url,
+        bodyTemplate,
+        responsePath,
+        headers
+      };
+      
+      sendToCustomAi(testMessage, customAiSettings)
+        .then(response => {
+          updateStatus('Test successful! Response: ' + (response.length > 50 ? response.substring(0, 50) + '...' : response), 'success');
+        })
+        .catch(error => {
+          updateStatus('Test failed: ' + error.message, 'error');
+        });
     });
   }
 
@@ -323,7 +771,7 @@ function initializePopup() {
       if (resultTextarea) resultTextarea.value = 'No text extracted yet.';
       if (copyBtn) copyBtn.disabled = true;
       if (clearBtn) clearBtn.disabled = true;
-      if (sendToOpenaiBtn) sendToOpenaiBtn.disabled = true;
+      if (sendToAiBtn) sendToAiBtn.disabled = true;
       
       // Clear AI response from the DOM
       if (aiResponseDiv) {
@@ -385,7 +833,7 @@ function initializePopup() {
       if (resultTextarea) resultTextarea.value = 'No text extracted yet.';
       if (copyBtn) copyBtn.disabled = true;
       if (clearBtn) clearBtn.disabled = true;
-      if (sendToOpenaiBtn) sendToOpenaiBtn.disabled = true;
+      if (sendToAiBtn) sendToAiBtn.disabled = true;
       showElement(previewContainer, false);
       showElement(aiResponseContainer, false);
       
@@ -403,57 +851,115 @@ function initializePopup() {
     });
   }
   
-  // Send to OpenAI button handler
-  if (sendToOpenaiBtn) {
-    sendToOpenaiBtn.addEventListener('click', function() {
+  // Send to AI button handler (modified to support multiple AI service options)
+  if (sendToAiBtn) {
+    sendToAiBtn.addEventListener('click', function() {
       if (!resultTextarea || resultTextarea.value.trim() === '' || resultTextarea.value === 'No text extracted yet.') {
-        updateStatus('No text to send to OpenAI', 'error');
+        updateStatus('No text to send to AI', 'error');
         return;
       }
       
-      storageGet(['openaiApiKey']).then(function(result) {
-        const apiKey = result.openaiApiKey;
-        
-        if (!apiKey) {
-          updateStatus('Error: OpenAI API key is not set. Please set it in the Settings tab.', 'error');
-          return;
-        }
+      // Get selected AI service
+      storageGet(['aiService']).then(function(result) {
+        const aiService = result.aiService || 'openai';
         
         // Show loading indicator
         showElement(loadingDiv, true);
-        updateStatus('Sending to OpenAI...', '');
+        updateStatus(`Sending to ${aiService === 'openai' ? 'OpenAI' : aiService === 'local' ? 'local AI server' : 'custom AI API'}...`, '');
         
-        // Send the text to OpenAI API
-        sendToOpenAI(resultTextarea.value, apiKey).then(response => {
-          showElement(loadingDiv, false);
-          showElement(aiResponseContainer, true);
-          if (aiResponseDiv) {
-            aiResponseDiv.innerHTML = formatMarkdown(response);
+        if (aiService === 'openai') {
+          // Get OpenAI settings
+          storageGet(['openaiSettings']).then(function(result) {
+            const openaiSettings = result.openaiSettings || {};
+            const apiKey = openaiSettings.apiKey;
+            const model = openaiSettings.model || 'gpt-4o-mini-2024-07-18';
             
-            // Add styling to code blocks
-            aiResponseDiv.querySelectorAll('pre code').forEach(block => {
-              block.style.display = 'block';
-              block.style.padding = '10px';
-              block.style.backgroundColor = '#45464b';
-              block.style.borderRadius = '4px';
-              block.style.fontFamily = 'monospace';
-              block.style.overflow = 'auto';
-            });
+            if (!apiKey) {
+              showElement(loadingDiv, false);
+              updateStatus('Error: OpenAI API key is not set. Please set it in the Settings tab.', 'error');
+              return;
+            }
             
-            // Save the AI response to storage for persistence
-            storageSet({aiResponse: response}).catch(error => {
-              console.error('Error saving AI response:', error);
-            });
-          }
-          updateStatus('Response received from OpenAI!', 'success');
-        }).catch(error => {
-          showElement(loadingDiv, false);
-          updateStatus('Error from OpenAI: ' + (error ? error.message : 'Unknown error'), 'error');
-        });
+            // Send the text to OpenAI API
+            sendToOpenAI(resultTextarea.value, apiKey, model).then(handleAiResponse).catch(handleAiError);
+          }).catch(error => {
+            showElement(loadingDiv, false);
+            updateStatus('Error getting OpenAI settings: ' + (error ? error.message : 'Unknown error'), 'error');
+          });
+        } else if (aiService === 'local') {
+          // Get local AI server settings
+          storageGet(['localAiSettings']).then(function(result) {
+            const localAiSettings = result.localAiSettings || {};
+            const url = localAiSettings.url;
+            const model = localAiSettings.model || '';
+            
+            if (!url) {
+              showElement(loadingDiv, false);
+              updateStatus('Error: Local AI server URL is not set. Please set it in the Settings tab.', 'error');
+              return;
+            }
+            
+            // Send the text to local AI server
+            sendToLocalAi(resultTextarea.value, url, model).then(handleAiResponse).catch(handleAiError);
+          }).catch(error => {
+            showElement(loadingDiv, false);
+            updateStatus('Error getting local AI settings: ' + (error ? error.message : 'Unknown error'), 'error');
+          });
+        } else if (aiService === 'custom') {
+          // Get custom AI API settings
+          storageGet(['customAiSettings']).then(function(result) {
+            const customAiSettings = result.customAiSettings;
+            
+            if (!customAiSettings || !customAiSettings.url) {
+              showElement(loadingDiv, false);
+              updateStatus('Error: Custom AI API settings are not set. Please configure them in the Settings tab.', 'error');
+              return;
+            }
+            
+            // Send the text to custom AI API
+            sendToCustomAi(resultTextarea.value, customAiSettings).then(handleAiResponse).catch(handleAiError);
+          }).catch(error => {
+            showElement(loadingDiv, false);
+            updateStatus('Error getting custom AI settings: ' + (error ? error.message : 'Unknown error'), 'error');
+          });
+        }
       }).catch(error => {
-        updateStatus('Error getting API key: ' + (error ? error.message : 'Unknown error'), 'error');
+        showElement(loadingDiv, false);
+        updateStatus('Error getting AI service: ' + (error ? error.message : 'Unknown error'), 'error');
       });
     });
+  }
+  
+  // Common handler for AI responses
+  function handleAiResponse(response) {
+    const cleanedResponse = cleanSystemMessages(response);
+    showElement(loadingDiv, false);
+    showElement(aiResponseContainer, true);
+    if (aiResponseDiv) {
+      aiResponseDiv.innerHTML = formatMarkdown(cleanedResponse);
+      
+      // Add styling to code blocks
+      aiResponseDiv.querySelectorAll('pre code').forEach(block => {
+        block.style.display = 'block';
+        block.style.padding = '10px';
+        block.style.backgroundColor = '#45464b';
+        block.style.borderRadius = '4px';
+        block.style.fontFamily = 'monospace';
+        block.style.overflow = 'auto';
+      });
+      
+      // Save the AI response to storage for persistence
+      storageSet({aiResponse: cleanedResponse}).catch(error => {
+        console.error('Error saving AI response:', error);
+      });
+    }
+    updateStatus('Response received from AI!', 'success');
+  }
+  
+  // Common handler for AI errors
+  function handleAiError(error) {
+    showElement(loadingDiv, false);
+    updateStatus('Error from AI: ' + (error ? error.message : 'Unknown error'), 'error');
   }
   
   // Listen for changes in the result textarea to enable/disable buttons
@@ -462,7 +968,7 @@ function initializePopup() {
       const hasText = this.value.trim() !== '' && this.value !== 'No text extracted yet.';
       if (copyBtn) copyBtn.disabled = !hasText;
       if (clearBtn) clearBtn.disabled = !hasText;
-      if (sendToOpenaiBtn) sendToOpenaiBtn.disabled = !hasText;
+      if (sendToAiBtn) sendToAiBtn.disabled = !hasText;
       
       // Save the edited text
       if (hasText) {
@@ -549,10 +1055,14 @@ function initializePopup() {
           });
           
           // Get selected OCR service
-          storageGet(['ocrService', 'ocrspaceApiKey', 'serverUrl']).then(function(result) {
+          storageGet(['ocrService', 'ocrspaceApiKey', 'serverUrl', 'customOcrSettings']).then(function(result) {
             const ocrService = result.ocrService || 'local';
             
-            updateStatus(`Extracting text using ${ocrService === 'local' ? 'local server' : 'OCR.space'}...`, '');
+            updateStatus(`Extracting text using ${
+              ocrService === 'local' ? 'local server' : 
+              ocrService === 'ocrspace' ? 'OCR.space' : 
+              'custom OCR API'
+            }...`, '');
             
             if (ocrService === 'ocrspace') {
               const apiKey = result.ocrspaceApiKey;
@@ -564,11 +1074,22 @@ function initializePopup() {
               }
               
               extractTextWithOCRSpace(croppedDataUrl, apiKey).then(handleOcrResult).catch(handleOcrError);
-            } else {
+            } else if (ocrService === 'local') {
               // Use the local server with the stored URL
               const serverUrl = result.serverUrl || 'http://localhost:8000';
               
               extractTextWithLocalServer(croppedDataUrl, serverUrl).then(handleOcrResult).catch(handleOcrError);
+            } else if (ocrService === 'custom') {
+              // Use custom OCR API
+              const customOcrSettings = result.customOcrSettings;
+              
+              if (!customOcrSettings || !customOcrSettings.url) {
+                showElement(loadingDiv, false);
+                updateStatus('Error: Custom OCR API settings are not set', 'error');
+                return;
+              }
+              
+              extractTextWithCustomApi(croppedDataUrl, customOcrSettings).then(handleOcrResult).catch(handleOcrError);
             }
           }).catch(error => {
             showElement(loadingDiv, false);
@@ -608,7 +1129,7 @@ function initializePopup() {
     if (resultTextarea) resultTextarea.value = text;
     if (copyBtn) copyBtn.disabled = false;
     if (clearBtn) clearBtn.disabled = false;
-    if (sendToOpenaiBtn) sendToOpenaiBtn.disabled = text === "No text was detected in the selected area.";
+    if (sendToAiBtn) sendToAiBtn.disabled = text === "No text was detected in the selected area.";
     updateStatus('Text extracted successfully!', 'success');
     
     // Store the result
@@ -630,11 +1151,10 @@ function initializePopup() {
     if (resultTextarea) resultTextarea.value = 'Error during text extraction. Please try again.';
   }
   
-  // Updated: Extract text using local server with configurable server URL
+  // Extract text using local server
   function extractTextWithLocalServer(imageData, serverUrl) {
     console.log('Using local server at:', serverUrl);
     
-    // Use the server URL as provided without modifying it
     return fetch(serverUrl, {
       method: 'POST',
       headers: {
@@ -717,8 +1237,104 @@ function initializePopup() {
     });
   }
   
-  // Send text to OpenAI API
-  function sendToOpenAI(text, apiKey) {
+  // Extract text using custom OCR API
+  function extractTextWithCustomApi(imageData, settings) {
+    console.log('Using custom OCR API at:', settings.url);
+    
+    // Prepare headers
+    const headers = {
+      'Content-Type': 'application/json',
+      ...settings.headers
+    };
+    
+    // Prepare request body based on image format
+    let requestBody;
+    
+    if (settings.imageFormat === 'base64') {
+      // Use base64 string directly
+      const base64Data = imageData.split(',')[1];
+      
+      // Create a dynamic object with the parameter name from settings
+      const bodyObj = {};
+      bodyObj[settings.paramName] = base64Data;
+      
+      requestBody = JSON.stringify(bodyObj);
+    } else {
+      // Use FormData
+      const byteString = atob(imageData.split(',')[1]);
+      const mimeType = imageData.split(',')[0].split(':')[1].split(';')[0];
+      const arrayBuffer = new ArrayBuffer(byteString.length);
+      const uint8Array = new Uint8Array(arrayBuffer);
+      
+      for (let i = 0; i < byteString.length; i++) {
+        uint8Array[i] = byteString.charCodeAt(i);
+      }
+      
+      const blob = new Blob([arrayBuffer], {type: mimeType});
+      
+      // Create FormData
+      const formData = new FormData();
+      formData.append(settings.paramName, blob, 'screenshot.png');
+      
+      // Don't set Content-Type header for FormData, browser will set it with boundary
+      delete headers['Content-Type'];
+      
+      requestBody = formData;
+    }
+    
+    // Make the API request
+    return fetch(settings.url, {
+      method: 'POST',
+      headers: headers,
+      body: requestBody
+    })
+    .then(response => {
+      if (!response.ok) {
+        throw new Error('Custom OCR API returned status ' + response.status);
+      }
+      return response.json();
+    })
+    .then(data => {
+      console.log('Custom OCR API response:', data);
+      
+      // Extract text using the response path
+      const pathParts = settings.responsePath.split('.');
+      let result = data;
+      
+      for (const part of pathParts) {
+        if (result === null || result === undefined) {
+          break;
+        }
+        
+        // Handle array indexing (e.g., results[0])
+        const arrayMatch = part.match(/^([^\[]+)\[(\d+)\]$/);
+        if (arrayMatch) {
+          const arrayName = arrayMatch[1];
+          const arrayIndex = parseInt(arrayMatch[2]);
+          
+          if (result[arrayName] && Array.isArray(result[arrayName]) && result[arrayName].length > arrayIndex) {
+            result = result[arrayName][arrayIndex];
+          } else {
+            result = null;
+            break;
+          }
+        } else {
+          result = result[part];
+        }
+      }
+      
+      if (result === null || result === undefined) {
+        throw new Error('Could not find text at the specified response path');
+      }
+      
+      // Convert to string
+      const text = result.toString();
+      return text.trim() || "No text detected";
+    });
+  }
+  
+  // Send text to OpenAI API with configurable model
+  function sendToOpenAI(text, apiKey, model) {
     // The OpenAI API endpoint
     const apiUrl = 'https://api.openai.com/v1/chat/completions';
     
@@ -729,7 +1345,7 @@ function initializePopup() {
         'Authorization': `Bearer ${apiKey}`
       },
       body: JSON.stringify({
-        model: 'gpt-4o-mini-2024-07-18',
+        model: model, // Use the specified model
         messages: [
           { role: 'system', content: 'You are a helpful assistant.' },
           { role: 'user', content: text }
@@ -754,6 +1370,123 @@ function initializePopup() {
     });
   }
   
+  // Send text to local AI server
+  function sendToLocalAi(text, serverUrl, model) {
+    console.log('Using local AI server at:', serverUrl);
+    
+    // Prepare request body
+    const requestBody = {
+      text: text
+    };
+    
+    // Add model if specified
+    if (model) {
+      requestBody.model = model;
+    }
+    
+    return fetch(serverUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(requestBody)
+    })
+    .then(response => {
+      if (!response.ok) {
+        throw new Error('Local AI server returned status ' + response.status);
+      }
+      return response.json();
+    })
+    .then(data => {
+      console.log('Local AI server response:', data);
+      
+      // Check for the response field (expecting 'response' or 'text' field)
+      if (data.response) {
+        return data.response;
+      } else if (data.text) {
+        return data.text;
+      } else if (data.content) {
+        return data.content;
+      } else {
+        throw new Error('Unexpected response format from local AI server');
+      }
+    });
+  }
+  
+  // Send text to custom AI API
+  function sendToCustomAi(text, settings) {
+    console.log('Using custom AI API at:', settings.url);
+    
+    // Prepare headers
+    const headers = {
+      'Content-Type': 'application/json',
+      ...settings.headers
+    };
+    
+    // Replace {{text}} in body template with actual text
+    const processedBodyTemplate = settings.bodyTemplate.replace('{{text}}', text);
+    
+    // Parse the body template
+    let requestBody;
+    try {
+      // Try to parse as JSON
+      const bodyObject = JSON.parse(processedBodyTemplate);
+      requestBody = JSON.stringify(bodyObject);
+    } catch (e) {
+      // If not valid JSON, use as is
+      requestBody = processedBodyTemplate;
+    }
+    
+    // Make the API request
+    return fetch(settings.url, {
+      method: 'POST',
+      headers: headers,
+      body: requestBody
+    })
+    .then(response => {
+      if (!response.ok) {
+        throw new Error('Custom AI API returned status ' + response.status);
+      }
+      return response.json();
+    })
+    .then(data => {
+      console.log('Custom AI API response:', data);
+      
+      // Extract response using the response path
+      const pathParts = settings.responsePath.split('.');
+      let result = data;
+      
+      for (const part of pathParts) {
+        if (result === null || result === undefined) {
+          break;
+        }
+        
+        // Handle array indexing (e.g., choices[0])
+        const arrayMatch = part.match(/^([^\[]+)\[(\d+)\]$/);
+        if (arrayMatch) {
+          const arrayName = arrayMatch[1];
+          const arrayIndex = parseInt(arrayMatch[2]);
+          
+          if (result[arrayName] && Array.isArray(result[arrayName]) && result[arrayName].length > arrayIndex) {
+            result = result[arrayName][arrayIndex];
+          } else {
+            result = null;
+            break;
+          }
+        } else {
+          result = result[part];
+        }
+      }
+      
+      if (result === null || result === undefined) {
+        throw new Error('Could not find response at the specified path');
+      }
+      
+      // Return response
+      return result.toString();
+    });
+  }
+  
   // Listen for messages from background script
   browserAPI.runtime.onMessage.addListener(function(request, sender, sendResponse) {
     console.log('Popup received message:', request.action);
@@ -775,13 +1508,114 @@ function initializePopup() {
   function formatMarkdown(text) {
     if (!text) return '';
     
+    // First ensure all system messages are removed
+    const cleanedText = cleanSystemMessages(text);
+    
     // Sanitize the input to prevent XSS
-    const sanitized = text
+    const sanitized = cleanedText
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;');
     
-    // Convert markdown to HTML
-    let formatted = sanitized
+    // Process mathematics notation with enhanced symbol support
+    let formatted = sanitized;
+    
+    // Handle display math notation \[ ... \]
+    formatted = formatted.replace(/\\\[([\s\S]*?)\\\]/g, '<div class="math-display">$1</div>');
+    
+    // Handle inline math notation \( ... \)
+    formatted = formatted.replace(/\\\(([\s\S]*?)\\\)/g, '<span class="math-inline">$1</span>');
+    
+    // Enhanced LaTeX math symbols
+    const mathSymbols = [
+      // Basic operators
+      { pattern: /\\cap/g, replacement: '∩' },             // Intersection
+      { pattern: /\\cup/g, replacement: '∪' },             // Union
+      { pattern: /\\in/g, replacement: '∈' },              // Element of
+      { pattern: /\\subset/g, replacement: '⊂' },          // Subset
+      { pattern: /\\supset/g, replacement: '⊃' },          // Superset
+      { pattern: /\\emptyset/g, replacement: '∅' },        // Empty set
+      
+      // Arithmetic operators
+      { pattern: /\\times/g, replacement: '×' },           // Multiplication
+      { pattern: /\\div/g, replacement: '÷' },             // Division
+      { pattern: /\\pm/g, replacement: '±' },              // Plus-minus
+      { pattern: /\\cdot/g, replacement: '·' },            // Dot product
+      
+      // Comparison operators
+      { pattern: /\\leq/g, replacement: '≤' },             // Less than or equal
+      { pattern: /\\geq/g, replacement: '≥' },             // Greater than or equal
+      { pattern: /\\neq/g, replacement: '≠' },             // Not equal
+      { pattern: /\\approx/g, replacement: '≈' },          // Approximately
+      
+      // Arrows and implications
+      { pattern: /\\rightarrow/g, replacement: '→' },      // Right arrow
+      { pattern: /\\leftarrow/g, replacement: '←' },       // Left arrow
+      { pattern: /\\Rightarrow/g, replacement: '⇒' },      // Right double arrow
+      { pattern: /\\Leftarrow/g, replacement: '⇐' },       // Left double arrow
+      { pattern: /\\implies/g, replacement: '⟹' },        // Implies
+      { pattern: /\\iff/g, replacement: '⟺' },            // If and only if
+      
+      // Other symbols
+      { pattern: /\\ldots/g, replacement: '…' },           // Horizontal ellipsis
+      { pattern: /\\infty/g, replacement: '∞' },           // Infinity
+      
+      // Greek letters (lowercase)
+      { pattern: /\\alpha/g, replacement: 'α' },
+      { pattern: /\\beta/g, replacement: 'β' },
+      { pattern: /\\gamma/g, replacement: 'γ' },
+      { pattern: /\\delta/g, replacement: 'δ' },
+      { pattern: /\\epsilon/g, replacement: 'ε' },
+      { pattern: /\\zeta/g, replacement: 'ζ' },
+      { pattern: /\\eta/g, replacement: 'η' },
+      { pattern: /\\theta/g, replacement: 'θ' },
+      { pattern: /\\iota/g, replacement: 'ι' },
+      { pattern: /\\kappa/g, replacement: 'κ' },
+      { pattern: /\\lambda/g, replacement: 'λ' },
+      { pattern: /\\mu/g, replacement: 'μ' },
+      { pattern: /\\nu/g, replacement: 'ν' },
+      { pattern: /\\xi/g, replacement: 'ξ' },
+      { pattern: /\\pi/g, replacement: 'π' },
+      { pattern: /\\rho/g, replacement: 'ρ' },
+      { pattern: /\\sigma/g, replacement: 'σ' },
+      { pattern: /\\tau/g, replacement: 'τ' },
+      { pattern: /\\upsilon/g, replacement: 'υ' },
+      { pattern: /\\phi/g, replacement: 'φ' },
+      { pattern: /\\chi/g, replacement: 'χ' },
+      { pattern: /\\psi/g, replacement: 'ψ' },
+      { pattern: /\\omega/g, replacement: 'ω' },
+      
+      // Greek letters (uppercase)
+      { pattern: /\\Gamma/g, replacement: 'Γ' },
+      { pattern: /\\Delta/g, replacement: 'Δ' },
+      { pattern: /\\Theta/g, replacement: 'Θ' },
+      { pattern: /\\Lambda/g, replacement: 'Λ' },
+      { pattern: /\\Xi/g, replacement: 'Ξ' },
+      { pattern: /\\Pi/g, replacement: 'Π' },
+      { pattern: /\\Sigma/g, replacement: 'Σ' },
+      { pattern: /\\Phi/g, replacement: 'Φ' },
+      { pattern: /\\Psi/g, replacement: 'Ψ' },
+      { pattern: /\\Omega/g, replacement: 'Ω' }
+    ];
+    
+    // Apply all symbol replacements
+    mathSymbols.forEach(symbol => {
+      formatted = formatted.replace(symbol.pattern, symbol.replacement);
+    });
+    
+    // Remove any remaining \mi commands
+    formatted = formatted.replace(/\\mi/g, '');
+    
+    // Function notation n(A) for cardinality
+    formatted = formatted.replace(/n\((.*?)\)/g, '|$1|');
+    
+    // Make superscripts look better (e.g., x^2)
+    formatted = formatted.replace(/\^(\d+|\{.*?\})/g, '<sup>$1</sup>');
+    
+    // Make subscripts look better (e.g., x_i)
+    formatted = formatted.replace(/\_(\d+|\{.*?\})/g, '<sub>$1</sub>');
+    
+    // Apply standard markdown formatting
+    formatted = formatted
       // Handle code blocks (```code```)
       .replace(/```([\s\S]*?)```/g, '<pre><code>$1</code></pre>')
       
@@ -843,4 +1677,46 @@ if (document.readyState === 'loading') {
 } else {
   // DOM is already loaded, initialize immediately
   initializePopup();
+}
+function cleanSystemMessages(text) {
+  if (!text) return '';
+  
+  // First pass: Remove system tags and their content
+  let cleaned = text;
+  
+  // System tag patterns to remove completely
+  const systemPatterns = [
+    // Direct tag removal
+    /<search_reminders>[\s\S]*?<\/search_reminders>/gi,
+    /<automated_reminder_from_anthropic>[\s\S]*?<\/automated_reminder_from_anthropic>/gi,
+    /<fnr>[\s\S]*?<\/function_results>/gi,
+    /<[\s\S]*?<\/antml:[\s\S]*?>/gi,
+    /<userStyle>[\s\S]*?<\/userStyle>/gi,
+    /<thinking>[\s\S]*?<\/thinking>/gi,
+    /<citation_instructions>[\s\S]*?<\/citation_instructions>/gi,
+    /<content_guidelines>[\s\S]*?<\/content_guidelines>/gi,
+    /<web_search_tool>[\s\S]*?<\/web_search_tool>/gi,
+    /<search_guidelines>[\s\S]*?<\/search_guidelines>/gi,
+    /<copyright_handling>[\s\S]*?<\/copyright_handling>/gi,
+    /<styles_info>[\s\S]*?<\/styles_info>/gi,
+    /<artifacts_info>[\s\S]*?<\/artifacts_info>/gi,
+    /<document_context>[\s\S]*?<\/document_context>/gi,
+    
+    // Any other system-like tags not caught above
+    /<[a-z_]+>[\s\S]*?<\/[a-z_]+>/gi
+  ];
+  
+  // Remove all system patterns
+  systemPatterns.forEach(pattern => {
+    cleaned = cleaned.replace(pattern, '');
+  });
+  
+  // Remove any LaTeX math tags that don't contain actual math
+  cleaned = cleaned.replace(/\\mi(?!\w)/g, '');  // Remove standalone \mi
+  cleaned = cleaned.replace(/\\boxed\{([^}]*)\}/g, '$1');  // Remove \boxed and keep content
+  
+  // Trim whitespace
+  cleaned = cleaned.trim();
+  
+  return cleaned;
 }
