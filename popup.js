@@ -74,6 +74,24 @@ function initializePopup() {
   const sendToAiBtn = document.getElementById('sendToAiBtn');
   const aiResponseContainer = document.getElementById('ai-response-container');
   const aiResponseDiv = document.getElementById('ai-response');
+
+  // New elements for OCR tab
+  const uploadImageBtn = document.getElementById('uploadImageBtn');
+  const imageFileInput = document.getElementById('imageFileInput');
+  const sendToAiTabBtn = document.getElementById('sendToAiTabBtn');
+
+  // New elements for AI tab
+  const aiPrompt = document.getElementById('aiPrompt');
+  const appendExtractedTextBtn = document.getElementById('appendExtractedTextBtn');
+  const uploadAiImageBtn = document.getElementById('uploadAiImageBtn');
+  const aiImageFileInput = document.getElementById('aiImageFileInput');
+  const captureAiScreenshotBtn = document.getElementById('captureAiScreenshotBtn');
+  const useOcrImageBtn = document.getElementById('useOcrImageBtn');
+  const aiPreviewContainer = document.getElementById('ai-preview-container');
+  const removeAiImageBtn = document.getElementById('removeAiImageBtn');
+  const aiLoading = document.getElementById('ai-loading');
+  const copyAiResponseBtn = document.getElementById('copyAiResponseBtn');
+  const clearAiBtn = document.getElementById('clearAiBtn');
   
   console.log('Popup loaded');
   
@@ -166,6 +184,9 @@ function initializePopup() {
     });
   }
 
+  let currentOcrImage = null; // Stores the current OCR image
+  let currentAiImage = null; // Stores the image to be sent to AI
+
   // Tab switching functionality
   tabButtons.forEach(button => {
     button.addEventListener('click', function() {
@@ -179,8 +200,119 @@ function initializePopup() {
       // Hide all panes and show the selected one
       tabPanes.forEach(pane => pane.classList.remove('active'));
       document.getElementById(`${tabId}-tab`).classList.add('active');
+
+      // Special handling when switching to AI tab
+      if (tabId === 'ai') {
+        if (sendToAiBtn) {
+          sendToAiBtn.disabled = false;
+        }
+        // Check if we have extracted text to enable/disable the append button
+        storageGet(['extractedText']).then(function(result) {
+          if (appendExtractedTextBtn) {
+            appendExtractedTextBtn.disabled = !result.extractedText || 
+              result.extractedText === 'No text extracted yet.' ||
+              result.extractedText.trim() === '';
+          }
+        }).catch(error => {
+          console.error('Error checking for extracted text:', error);
+        });
+
+        // Check if we have an OCR image to enable/disable the use OCR image button
+        storageGet(['previewImage']).then(function(result) {
+          if (useOcrImageBtn) {
+            useOcrImageBtn.disabled = !result.previewImage;
+          }
+        }).catch(error => {
+          console.error('Error checking for preview image:', error);
+        });
+      }
     });
   });
+
+  if (uploadImageBtn && imageFileInput) {
+    uploadImageBtn.addEventListener('click', function() {
+      imageFileInput.click();
+    });
+
+    imageFileInput.addEventListener('change', function() {
+      if (this.files && this.files[0]) {
+        const file = this.files[0];
+        const reader = new FileReader();
+
+        // Show loading
+        showElement(loadingDiv, true);
+        updateStatus('Reading uploaded image...', '');
+
+        reader.onload = function(e) {
+          const imageDataUrl = e.target.result;
+          
+          // Show preview
+          showPreviewImage(imageDataUrl);
+          
+          // Store the image for future use
+          storageSet({previewImage: imageDataUrl}).then(function() {
+            console.log('Preview image saved');
+            
+            // Process with OCR
+            processUploadedImage(imageDataUrl);
+          }).catch(error => {
+            showElement(loadingDiv, false);
+            updateStatus('Error saving preview image: ' + error.message, 'error');
+          });
+        };
+
+        reader.onerror = function(e) {
+          showElement(loadingDiv, false);
+          updateStatus('Error reading image file: ' + e.target.error, 'error');
+        };
+
+        reader.readAsDataURL(file);
+      }
+    });
+  }
+
+  function processUploadedImage(imageDataUrl) {
+    updateStatus('Processing image...', '');
+    
+    // Get selected OCR service
+    storageGet(['ocrService', 'ocrspaceApiKey', 'serverUrl', 'customOcrSettings']).then(function(result) {
+      const ocrService = result.ocrService || 'local';
+      
+      updateStatus(`Extracting text using ${
+        ocrService === 'local' ? 'local server' : 
+        ocrService === 'ocrspace' ? 'OCR.space' : 
+        'custom OCR API'
+      }...`, '');
+      
+      if (ocrService === 'ocrspace') {
+        const apiKey = result.ocrspaceApiKey;
+        
+        if (!apiKey) {
+          showElement(loadingDiv, false);
+          updateStatus('Error: OCR.space API key is not set', 'error');
+          return;
+        }
+        
+        extractTextWithOCRSpace(imageDataUrl, apiKey).then(handleOcrResult).catch(handleOcrError);
+      } else if (ocrService === 'local') {
+        const serverUrl = result.serverUrl || 'http://localhost:8000';
+        extractTextWithLocalServer(imageDataUrl, serverUrl).then(handleOcrResult).catch(handleOcrError);
+      } else if (ocrService === 'custom') {
+        const customOcrSettings = result.customOcrSettings;
+        
+        if (!customOcrSettings || !customOcrSettings.url) {
+          showElement(loadingDiv, false);
+          updateStatus('Error: Custom OCR API settings are not set', 'error');
+          return;
+        }
+        
+        extractTextWithCustomApi(imageDataUrl, customOcrSettings).then(handleOcrResult).catch(handleOcrError);
+      }
+    }).catch(error => {
+      showElement(loadingDiv, false);
+      updateStatus('Error getting OCR settings: ' + (error ? error.message : 'Unknown error'), 'error');
+    });
+  }
 
   // Helper function to load OCR settings UI based on selected service
   function updateOcrUi(service) {
@@ -834,6 +966,7 @@ function initializePopup() {
       if (copyBtn) copyBtn.disabled = true;
       if (clearBtn) clearBtn.disabled = true;
       if (sendToAiBtn) sendToAiBtn.disabled = true;
+      if (sendToAiTabBtn) sendToAiTabBtn.disabled = true;
       showElement(previewContainer, false);
       showElement(aiResponseContainer, false);
       
@@ -845,17 +978,29 @@ function initializePopup() {
       // Remove all stored data including AI response
       storageRemove(['extractedText', 'pendingScreenshot', 'previewImage', 'aiResponse']).then(function() {
         updateStatus('Cleared!', 'success');
+        
+        // Reset the OCR image
+        currentOcrImage = null;
+        
+        // Disable the "Use OCR Image" button in the AI tab
+        if (useOcrImageBtn) {
+          useOcrImageBtn.disabled = true;
+        }
       }).catch(error => {
         updateStatus('Error clearing data: ' + (error ? error.message : 'Unknown error'), 'error');
       });
     });
   }
+
   
   // Send to AI button handler (modified to support multiple AI service options)
   if (sendToAiBtn) {
+    sendToAiBtn.disabled = false;
     sendToAiBtn.addEventListener('click', function() {
-      if (!resultTextarea || resultTextarea.value.trim() === '' || resultTextarea.value === 'No text extracted yet.') {
-        updateStatus('No text to send to AI', 'error');
+      const promptText = aiPrompt ? aiPrompt.value.trim() : '';
+      
+      if (!promptText && !currentAiImage) {
+        updateStatus('Please enter a prompt or add an image', 'error');
         return;
       }
       
@@ -864,7 +1009,7 @@ function initializePopup() {
         const aiService = result.aiService || 'openai';
         
         // Show loading indicator
-        showElement(loadingDiv, true);
+        showElement(aiLoading, true);
         updateStatus(`Sending to ${aiService === 'openai' ? 'OpenAI' : aiService === 'local' ? 'local AI server' : 'custom AI API'}...`, '');
         
         if (aiService === 'openai') {
@@ -875,15 +1020,15 @@ function initializePopup() {
             const model = openaiSettings.model || 'gpt-4o-mini-2024-07-18';
             
             if (!apiKey) {
-              showElement(loadingDiv, false);
+              showElement(aiLoading, false);
               updateStatus('Error: OpenAI API key is not set. Please set it in the Settings tab.', 'error');
               return;
             }
             
-            // Send the text to OpenAI API
-            sendToOpenAI(resultTextarea.value, apiKey, model).then(handleAiResponse).catch(handleAiError);
+            // Send the prompt and image (if any) to OpenAI API
+            sendToOpenAIWithImage(promptText, currentAiImage, apiKey, model).then(handleAiResponse).catch(handleAiError);
           }).catch(error => {
-            showElement(loadingDiv, false);
+            showElement(aiLoading, false);
             updateStatus('Error getting OpenAI settings: ' + (error ? error.message : 'Unknown error'), 'error');
           });
         } else if (aiService === 'local') {
@@ -894,15 +1039,15 @@ function initializePopup() {
             const model = localAiSettings.model || '';
             
             if (!url) {
-              showElement(loadingDiv, false);
+              showElement(aiLoading, false);
               updateStatus('Error: Local AI server URL is not set. Please set it in the Settings tab.', 'error');
               return;
             }
             
-            // Send the text to local AI server
-            sendToLocalAi(resultTextarea.value, url, model).then(handleAiResponse).catch(handleAiError);
+            // Send the prompt and image (if any) to local AI server
+            sendToLocalAiWithImage(promptText, currentAiImage, url, model).then(handleAiResponse).catch(handleAiError);
           }).catch(error => {
-            showElement(loadingDiv, false);
+            showElement(aiLoading, false);
             updateStatus('Error getting local AI settings: ' + (error ? error.message : 'Unknown error'), 'error');
           });
         } else if (aiService === 'custom') {
@@ -911,30 +1056,217 @@ function initializePopup() {
             const customAiSettings = result.customAiSettings;
             
             if (!customAiSettings || !customAiSettings.url) {
-              showElement(loadingDiv, false);
+              showElement(aiLoading, false);
               updateStatus('Error: Custom AI API settings are not set. Please configure them in the Settings tab.', 'error');
               return;
             }
             
-            // Send the text to custom AI API
-            sendToCustomAi(resultTextarea.value, customAiSettings).then(handleAiResponse).catch(handleAiError);
+            // Send the prompt and image (if any) to custom AI API
+            sendToCustomAiWithImage(promptText, currentAiImage, customAiSettings).then(handleAiResponse).catch(handleAiError);
           }).catch(error => {
-            showElement(loadingDiv, false);
+            showElement(aiLoading, false);
             updateStatus('Error getting custom AI settings: ' + (error ? error.message : 'Unknown error'), 'error');
           });
         }
       }).catch(error => {
-        showElement(loadingDiv, false);
+        showElement(aiLoading, false);
         updateStatus('Error getting AI service: ' + (error ? error.message : 'Unknown error'), 'error');
       });
     });
   }
   
+  if (sendToAiTabBtn) {
+    sendToAiTabBtn.addEventListener('click', function() {
+      if (!resultTextarea || resultTextarea.value.trim() === '' || resultTextarea.value === 'No text extracted yet.') {
+        updateStatus('No text to send to AI tab', 'error');
+        return;
+      }
+      
+      // Switch to AI tab
+      const aiTabButton = document.querySelector('.tab-button[data-tab="ai"]');
+      if (aiTabButton) {
+        aiTabButton.click();
+      }
+      
+      // Get the extracted text
+      const extractedText = resultTextarea.value;
+      
+      // Set the text in the AI prompt textarea
+      if (aiPrompt) {
+        aiPrompt.value = extractedText;
+      }
+      
+      // Show success message
+      updateStatus('Text sent to AI tab!', 'success');
+    });
+  }
+
+  if (appendExtractedTextBtn) {
+    appendExtractedTextBtn.addEventListener('click', function() {
+      storageGet(['extractedText']).then(function(result) {
+        const extractedText = result.extractedText;
+        
+        if (extractedText && extractedText !== 'No text extracted yet.' && extractedText.trim() !== '') {
+          // Append the text to the AI prompt textarea
+          if (aiPrompt) {
+            const currentText = aiPrompt.value;
+            
+            // Add a line break if there's already text
+            if (currentText && currentText.trim() !== '') {
+              aiPrompt.value = currentText + '\n\n' + extractedText;
+            } else {
+              aiPrompt.value = extractedText;
+            }
+            
+            // Show success message
+            updateStatus('Extracted text appended to prompt!', 'success');
+          }
+        } else {
+          updateStatus('No extracted text available to append', 'error');
+        }
+      }).catch(error => {
+        updateStatus('Error getting extracted text: ' + (error ? error.message : 'Unknown error'), 'error');
+      });
+    });
+  }
+
+  // Handle image upload for AI
+  if (uploadAiImageBtn && aiImageFileInput) {
+    uploadAiImageBtn.addEventListener('click', function() {
+      aiImageFileInput.click();
+    });
+
+    aiImageFileInput.addEventListener('change', function() {
+      if (this.files && this.files[0]) {
+        const file = this.files[0];
+        const reader = new FileReader();
+
+        reader.onload = function(e) {
+          const imageDataUrl = e.target.result;
+          
+          // Store the image for AI
+          currentAiImage = imageDataUrl;
+          
+          // Show preview
+          showAiPreviewImage(imageDataUrl);
+          
+          // Show success message
+          updateStatus('Image added to AI prompt!', 'success');
+        };
+
+        reader.onerror = function(e) {
+          updateStatus('Error reading image file: ' + e.target.error, 'error');
+        };
+
+        reader.readAsDataURL(file);
+      }
+    });
+  }
+
+  // Handle screenshot capture for AI
+  if (captureAiScreenshotBtn) {
+    captureAiScreenshotBtn.addEventListener('click', function() {
+      updateStatus('Starting capture for AI...', '');
+      captureAiScreenshotBtn.disabled = true;
+      
+      // Store a flag to indicate we're capturing for AI
+      storageSet({capturingForAi: true}).then(function() {
+        // Proceed with capture similar to the original capture button
+        browserAPI.tabs.query({active: true, currentWindow: true}).then(function(tabs) {
+          if (!tabs || tabs.length === 0) {
+            updateStatus('Error: No active tab found', 'error');
+            captureAiScreenshotBtn.disabled = false;
+            return;
+          }
+          
+          browserAPI.tabs.sendMessage(tabs[0].id, {action: 'startCapture'}).then(function(response) {
+            captureAiScreenshotBtn.disabled = false;
+            
+            if (response && response.status === 'ok') {
+              window.close(); // Close popup to allow user to select area
+            } else {
+              updateStatus('Error: Could not start capture', 'error');
+            }
+          }).catch(error => {
+            captureAiScreenshotBtn.disabled = false;
+            updateStatus('Error: ' + (error ? error.message : 'Could not communicate with page'), 'error');
+          });
+        }).catch(error => {
+          captureAiScreenshotBtn.disabled = false;
+          updateStatus('Error: ' + (error ? error.message : 'Unknown error'), 'error');
+        });
+      }).catch(error => {
+        captureAiScreenshotBtn.disabled = false;
+        updateStatus('Error setting capture mode: ' + (error ? error.message : 'Unknown error'), 'error');
+      });
+    });
+  }
+
+  // Handle "Use OCR Image" button
+  if (useOcrImageBtn) {
+    useOcrImageBtn.addEventListener('click', function() {
+      storageGet(['previewImage']).then(function(result) {
+        if (result.previewImage) {
+          // Store the OCR image for AI
+          currentAiImage = result.previewImage;
+          
+          // Show preview
+          showAiPreviewImage(result.previewImage);
+          
+          // Show success message
+          updateStatus('OCR image added to AI prompt!', 'success');
+        } else {
+          updateStatus('No OCR image available', 'error');
+        }
+      }).catch(error => {
+        updateStatus('Error getting OCR image: ' + (error ? error.message : 'Unknown error'), 'error');
+      });
+    });
+  }
+
+  // Handle remove AI image button
+  if (removeAiImageBtn) {
+    removeAiImageBtn.addEventListener('click', function() {
+      // Clear the AI image
+      currentAiImage = null;
+      
+      // Hide the preview
+      showElement(aiPreviewContainer, false);
+      
+      // Show success message
+      updateStatus('Image removed from AI prompt!', 'success');
+    });
+  }
+
+  // Function to show AI preview image
+  function showAiPreviewImage(dataUrl) {
+    if (!aiPreviewContainer) return;
+    
+    // Clear any existing preview
+    aiPreviewContainer.innerHTML = '';
+    
+    // Create and add new preview image
+    const previewImg = document.createElement('img');
+    previewImg.src = dataUrl;
+    previewImg.id = 'ai-preview-img';
+    previewImg.style.maxWidth = '100%';
+    previewImg.style.maxHeight = '150px';
+    previewImg.style.display = 'block';
+    previewImg.style.margin = '0 auto';
+    aiPreviewContainer.appendChild(previewImg);
+    
+    // Add back the remove button
+    aiPreviewContainer.appendChild(removeAiImageBtn);
+    
+    // Show the container
+    showElement(aiPreviewContainer, true);
+  }
+
   // Common handler for AI responses
   function handleAiResponse(response) {
     const cleanedResponse = cleanSystemMessages(response);
-    showElement(loadingDiv, false);
-    showElement(aiResponseContainer, true);
+    showElement(aiLoading, false);
+    showElement(aiResponseContainer, true); // Fixed: use the aiResponseContainer variable
     if (aiResponseDiv) {
       aiResponseDiv.innerHTML = formatMarkdown(cleanedResponse);
       
@@ -958,10 +1290,55 @@ function initializePopup() {
   
   // Common handler for AI errors
   function handleAiError(error) {
-    showElement(loadingDiv, false);
+    showElement(aiLoading, false);
     updateStatus('Error from AI: ' + (error ? error.message : 'Unknown error'), 'error');
   }
   
+  if (copyAiResponseBtn) {
+    copyAiResponseBtn.addEventListener('click', function() {
+      if (aiResponseDiv) {
+        // Get the text content without HTML tags
+        const text = aiResponseDiv.textContent || '';
+        
+        navigator.clipboard.writeText(text).then(function() {
+          updateStatus('AI response copied to clipboard!', 'success');
+        }, function(error) {
+          updateStatus('Failed to copy AI response: ' + (error ? error.message : 'Unknown error'), 'error');
+        });
+      }
+    });
+  }
+
+  if (clearAiBtn) {
+    clearAiBtn.addEventListener('click', function() {
+      // Clear the AI prompt
+      if (aiPrompt) {
+        aiPrompt.value = '';
+      }
+      
+      // Clear the AI image
+      currentAiImage = null;
+      
+      // Hide the preview
+      showElement(aiPreviewContainer, false);
+      
+      // Clear AI response from the DOM
+      if (aiResponseDiv) {
+        aiResponseDiv.innerHTML = '';
+      }
+      
+      // Hide the response container
+      showElement(aiResponseContainer, false);
+      
+      // Remove AI response from storage
+      storageRemove(['aiResponse']).then(function() {
+        updateStatus('AI interaction cleared!', 'success');
+      }).catch(error => {
+        updateStatus('Error clearing AI data: ' + (error ? error.message : 'Unknown error'), 'error');
+      });
+    });
+  }
+
   // Listen for changes in the result textarea to enable/disable buttons
   if (resultTextarea) {
     resultTextarea.addEventListener('input', function() {
@@ -1130,6 +1507,7 @@ function initializePopup() {
     if (copyBtn) copyBtn.disabled = false;
     if (clearBtn) clearBtn.disabled = false;
     if (sendToAiBtn) sendToAiBtn.disabled = text === "No text was detected in the selected area.";
+    if (sendToAiTabBtn) sendToAiTabBtn.disabled = text === "No text was detected in the selected area.";
     updateStatus('Text extracted successfully!', 'success');
     
     // Store the result
@@ -1141,7 +1519,22 @@ function initializePopup() {
     storageRemove(['pendingScreenshot']).catch(error => {
       console.error('Error removing pending screenshot:', error);
     });
+    
+    // Get the current preview image for the OCR image functionality
+    storageGet(['previewImage']).then(function(result) {
+      if (result.previewImage) {
+        currentOcrImage = result.previewImage;
+        
+        // Enable the "Use OCR Image" button in the AI tab
+        if (useOcrImageBtn) {
+          useOcrImageBtn.disabled = false;
+        }
+      }
+    }).catch(error => {
+      console.error('Error getting preview image:', error);
+    });
   }
+
   
   // Common handler for OCR errors
   function handleOcrError(error) {
@@ -1492,19 +1885,316 @@ function initializePopup() {
     console.log('Popup received message:', request.action);
     
     if (request.action === 'processScreenshot') {
-      // Retrieve the pending screenshot from storage
-      storageGet(['pendingScreenshot']).then(function(result) {
-        if (result.pendingScreenshot) {
-          processScreenshot(result.pendingScreenshot);
+      // Check if we're capturing for AI
+      storageGet(['capturingForAi', 'pendingScreenshot']).then(function(result) {
+        if (result.capturingForAi) {
+          // We're capturing for AI
+          if (result.pendingScreenshot) {
+            const screenshotData = result.pendingScreenshot;
+            
+            // Use the screenshot for AI
+            currentAiImage = screenshotData.dataUrl;
+            
+            // Show preview in AI tab
+            showAiPreviewImage(screenshotData.dataUrl);
+            
+            // Switch to AI tab
+            const aiTabButton = document.querySelector('.tab-button[data-tab="ai"]');
+            if (aiTabButton) {
+              aiTabButton.click();
+            }
+            
+            // Clear the pendingScreenshot and capturingForAi flag
+            storageRemove(['pendingScreenshot', 'capturingForAi']).then(function() {
+              updateStatus('Screenshot captured for AI!', 'success');
+            }).catch(error => {
+              console.error('Error clearing pending screenshot:', error);
+            });
+          }
+        } else {
+          // Normal OCR processing
+          if (result.pendingScreenshot) {
+            processScreenshot(result.pendingScreenshot);
+          }
         }
       }).catch(error => {
-        console.error('Error getting pending screenshot:', error);
+        console.error('Error getting pendingScreenshot:', error);
       });
     }
     
     return true;
   });
   
+  function sendToOpenAIWithImage(text, imageDataUrl, apiKey, model) {
+    // The OpenAI API endpoint for chat completions
+    const apiUrl = 'https://api.openai.com/v1/chat/completions';
+    
+    // Prepare the messages array
+    const messages = [
+      { role: 'system', content: 'You are a helpful assistant.' }
+    ];
+    
+    // If we have an image, add it to the messages
+    if (imageDataUrl) {
+      // For models that support images (like gpt-4-vision and gpt-4o)
+      if (model.includes('gpt-4') || model.includes('gpt-4o')) {
+        // Extract the base64 data
+        const base64Data = imageDataUrl.split(',')[1];
+        
+        // Add the message with image content
+        messages.push({
+          role: 'user',
+          content: [
+            // Add text if provided
+            ...(text ? [{ type: 'text', text: text }] : []),
+            // Add image
+            {
+              type: 'image_url',
+              image_url: {
+                url: `data:image/png;base64,${base64Data}`
+              }
+            }
+          ]
+        });
+      } else {
+        // For non-vision models, just describe that there was an image
+        const promptWithImageNote = text + 
+          (text ? '\n\n' : '') + 
+          '[Note: An image was included but this model does not support image input]';
+        
+        messages.push({ role: 'user', content: promptWithImageNote });
+      }
+    } else {
+      // Just text, no image
+      messages.push({ role: 'user', content: text });
+    }
+    
+    return fetch(apiUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`
+      },
+      body: JSON.stringify({
+        model: model,
+        messages: messages,
+        max_tokens: 1000
+      })
+    })
+    .then(response => {
+      if (!response.ok) {
+        throw new Error('OpenAI server returned status ' + response.status);
+      }
+      return response.json();
+    })
+    .then(data => {
+      console.log('OpenAI response:', data);
+      
+      if (!data.choices || data.choices.length === 0) {
+        throw new Error('No response generated');
+      }
+      
+      return data.choices[0].message.content;
+    });
+  }
+
+  // New function to send text and image to local AI server
+  function sendToLocalAiWithImage(text, imageDataUrl, serverUrl, model) {
+    console.log('Using local AI server at:', serverUrl);
+    
+    // Prepare request body
+    const requestBody = {
+      text: text
+    };
+    
+    // Add image if provided
+    if (imageDataUrl) {
+      // Extract the base64 data
+      const base64Data = imageDataUrl.split(',')[1];
+      requestBody.image = base64Data;
+    }
+    
+    // Add model if specified
+    if (model) {
+      requestBody.model = model;
+    }
+    
+    return fetch(serverUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(requestBody)
+    })
+    .then(response => {
+      if (!response.ok) {
+        throw new Error('Local AI server returned status ' + response.status);
+      }
+      return response.json();
+    })
+    .then(data => {
+      console.log('Local AI server response:', data);
+      
+      // Check for the response field (expecting 'response' or 'text' field)
+      if (data.response) {
+        return data.response;
+      } else if (data.text) {
+        return data.text;
+      } else if (data.content) {
+        return data.content;
+      } else {
+        throw new Error('Unexpected response format from local AI server');
+      }
+    });
+  }
+
+  // New function to send text and image to custom AI API
+  function sendToCustomAiWithImage(text, imageDataUrl, settings) {
+    console.log('Using custom AI API at:', settings.url);
+    
+    // Prepare headers
+    const headers = {
+      'Content-Type': 'application/json',
+      ...settings.headers
+    };
+    
+    // Check for image support in custom API
+    const customImageSupport = document.querySelector('input[name="customAiImageSupport"]:checked');
+    const imageSupport = customImageSupport ? customImageSupport.value : 'none';
+    
+    // Replace {{text}} in body template with actual text
+    let processedBodyTemplate = settings.bodyTemplate.replace('{{text}}', text || '');
+    
+    // Replace {{image}} with base64 image data if applicable
+    if (imageDataUrl && imageSupport === 'base64') {
+      const base64Data = imageDataUrl.split(',')[1];
+      processedBodyTemplate = processedBodyTemplate.replace('{{image}}', base64Data);
+    } else if (imageDataUrl && imageSupport === 'url') {
+      // URL support would require hosting the image somewhere
+      // For now, we'll just replace with a placeholder
+      processedBodyTemplate = processedBodyTemplate.replace('{{image}}', 'IMAGE_URL_NOT_SUPPORTED');
+    }
+    
+    // Parse the body template
+    let requestBody;
+    try {
+      // Try to parse as JSON
+      const bodyObject = JSON.parse(processedBodyTemplate);
+      requestBody = JSON.stringify(bodyObject);
+    } catch (e) {
+      // If not valid JSON, use as is
+      requestBody = processedBodyTemplate;
+    }
+    
+    // Make the API request
+    return fetch(settings.url, {
+      method: 'POST',
+      headers: headers,
+      body: requestBody
+    })
+    .then(response => {
+      if (!response.ok) {
+        throw new Error('Custom AI API returned status ' + response.status);
+      }
+      return response.json();
+    })
+    .then(data => {
+      console.log('Custom AI API response:', data);
+      
+      // Extract response using the response path
+      const pathParts = settings.responsePath.split('.');
+      let result = data;
+      
+      for (const part of pathParts) {
+        if (result === null || result === undefined) {
+          break;
+        }
+        
+        // Handle array indexing (e.g., choices[0])
+        const arrayMatch = part.match(/^([^\[]+)\[(\d+)\]$/);
+        if (arrayMatch) {
+          const arrayName = arrayMatch[1];
+          const arrayIndex = parseInt(arrayMatch[2]);
+          
+          if (result[arrayName] && Array.isArray(result[arrayName]) && result[arrayName].length > arrayIndex) {
+            result = result[arrayName][arrayIndex];
+          } else {
+            result = null;
+            break;
+          }
+        } else {
+          result = result[part];
+        }
+      }
+      
+      if (result === null || result === undefined) {
+        throw new Error('Could not find response at the specified path');
+      }
+      
+      // Return response
+      return result.toString();
+    });
+  }
+  
+  // Load AI tab state
+  storageGet(['aiResponse']).then(function(result) {
+    // Handle AI response if it exists
+    if (result.aiResponse && aiResponseDiv) {
+      aiResponseDiv.innerHTML = formatMarkdown(result.aiResponse);
+      showElement(aiResponseContainer, true);
+      
+      // Add styling to code blocks
+      aiResponseDiv.querySelectorAll('pre code').forEach(block => {
+        block.style.display = 'block';
+        block.style.padding = '10px';
+        block.style.backgroundColor = '#45464b';
+        block.style.borderRadius = '4px';
+        block.style.fontFamily = 'monospace';
+        block.style.overflow = 'auto';
+      });
+    }
+  }).catch(error => {
+    console.error('Error loading AI response:', error);
+  });
+
+  function initializeAiTab() {
+    // Always enable the send to AI button
+    if (sendToAiBtn) {
+      sendToAiBtn.disabled = false;
+    }
+  
+    // Check if we have extracted text to enable/disable the append button
+    storageGet(['extractedText']).then(function(result) {
+      if (appendExtractedTextBtn) {
+        appendExtractedTextBtn.disabled = !result.extractedText || 
+          result.extractedText === 'No text extracted yet.' ||
+          result.extractedText.trim() === '';
+      }
+    }).catch(error => {
+      console.error('Error checking for extracted text:', error);
+      // Default to disabled if there's an error
+      if (appendExtractedTextBtn) {
+        appendExtractedTextBtn.disabled = true;
+      }
+    });
+  
+    // Check if we have an OCR image to enable/disable the use OCR image button
+    storageGet(['previewImage']).then(function(result) {
+      if (useOcrImageBtn) {
+        useOcrImageBtn.disabled = !result.previewImage;
+      }
+    }).catch(error => {
+      console.error('Error checking for preview image:', error);
+      // Default to disabled if there's an error
+      if (useOcrImageBtn) {
+        useOcrImageBtn.disabled = true;
+      }
+    });
+  }
+  
+  // Call this function during initialization
+  initializeAiTab();
+
   function formatMarkdown(text) {
     if (!text) return '';
     
