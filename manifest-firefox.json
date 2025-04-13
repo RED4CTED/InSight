@@ -5,12 +5,13 @@
   "description": "Extract text from screenshots and send to AI",
   "permissions": [
     "activeTab",
+    "scripting",
     "storage", 
     "tabs",
+    "notifications",
     "<all_urls>"
   ],
   "browser_action": {
-    "default_popup": "popup.html",
     "default_icon": "icon.png"
   },
   "background": {
@@ -24,12 +25,17 @@
     }
   ],
   "web_accessible_resources": [
-    "html2canvas.min.js",
-    "browser-polyfill.js",
-    "popup.js",
-    "detect-browser.js",
-    "script-loader.js"
-  ],
+  "popup.html",
+  "popup.css",
+  "popup.js",
+  "html2canvas.min.js",
+  "browser-polyfill.js",
+  "detect-browser.js",
+  "script-loader.js",
+  "panel-styles.css",
+  "panel.html",
+  "panel.js"
+],
   "browser_specific_settings": {
     "gecko": {
       "id": "insight@example.com"

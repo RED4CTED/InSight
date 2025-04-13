@@ -7,14 +7,13 @@
     "activeTab",
     "scripting",
     "storage",
-    "tabs"
+    "tabs",
+    "notifications"
   ],
   "host_permissions": [
-    "*://*/*",
-    "<all_urls>"
+    "*://*/*"
   ],
   "action": {
-    "default_popup": "popup.html",
     "default_icon": "icon.png"
   },
   "background": {
@@ -28,11 +27,19 @@
     }
   ],
   "web_accessible_resources": [
-    {
-      "resources": ["html2canvas.min.js", "detect-browser.js", "popup.js", "script-loader.js"],
-      "matches": ["<all_urls>"]
-    }
-  ],
+  {
+    "resources": [
+      "popup.html", 
+      "popup.css", 
+      "popup.js", 
+      "script-loader.js", 
+      "panel-styles.css",
+      "panel.html",
+      "panel.js"
+    ],
+    "matches": ["<all_urls>"]
+  }
+],
   "content_security_policy": {
     "extension_pages": "script-src 'self'; object-src 'self'"
   }

@@ -5,10 +5,13 @@ body {
   padding: 0;
   color: #333;
   background-color: #f9f9fa;
+  border-radius: 12px;
+  overflow: hidden;
 }
 
 .container {
   padding: 20px;
+  border-radius: 12px;
 }
 
 .header {
@@ -639,4 +642,29 @@ h4 {
   .remove-image-btn:hover {
     background-color: rgba(255, 255, 255, 0.3);
   }
+}
+.result-container, 
+.preview-image-container,
+.action-button,
+input, 
+select,
+textarea,
+.result-editor,
+.prompt-editor,
+.tab-pane,
+.headers-list,
+.header-item {
+  border-radius: 8px; /* Consistent rounded corners for all elements */
+}
+
+/* Make smaller elements have smaller rounded corners */
+.action-button.small,
+.remove-header,
+.header-item {
+  border-radius: 4px;
+}
+
+/* Light shadow for better depth perception */
+.result-container {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }

@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>InSight Panel</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      overflow: hidden;
+      height: 100vh;
+      background-color: #f9f9fa;
+      border-radius: 16px;
+      display: flex;
+      flex-direction: column;
+    }
+    
+    /* Dark mode */
+    @media (prefers-color-scheme: dark) {
+      body {
+        background-color: #292a2d;
+        color: #e8eaed;
+      }
+    }
+    
+    .panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 16px;
+      background: linear-gradient(to right, #1a73e8, #8ab4f8);
+      color: white;
+      cursor: move;
+      border-top-left-radius: 16px;
+      border-top-right-radius: 16px;
+      user-select: none;
+      height: 48px;
+      box-sizing: border-box;
+    }
+    
+    .panel-title {
+      margin: 0;
+      font-size: 16px;
+      font-weight: 500;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      flex: 1;
+    }
+    
+    .panel-button {
+      background: none;
+      border: none;
+      color: white;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 50%;
+      transition: background-color 0.2s;
+      width: 24px;
+      height: 24px;
+      font-size: 14px;
+      padding: 0;
+      margin-left: 8px;
+    }
+    
+    .panel-button:hover {
+      background-color: rgba(255, 255, 255, 0.2);
+    }
+    
+    .panel-close {
+      font-size: 24px;
+    }
+    
+    .panel-content {
+      flex: 1;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+    
+    .content-iframe {
+      border: none;
+      width: 100%;
+      height: 100%;
+      overflow: auto;
+    }
+    
+    .resize-handle {
+      position: absolute;
+      right: 0;
+      bottom: 0;
+      width: 20px;
+      height: 20px;
+      cursor: nwse-resize;
+      background: linear-gradient(135deg, transparent 50%, rgba(180, 180, 180, 0.5) 50%);
+      border-bottom-right-radius: 16px;
+    }
+    
+    @media (prefers-color-scheme: dark) {
+      .resize-handle {
+        background: linear-gradient(135deg, transparent 50%, rgba(100, 100, 100, 0.5) 50%);
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="panel-header">
+    <h1 class="panel-title">InSight Text Extractor</h1>
+    <button class="panel-button" id="collapse-btn" title="Collapse panel">▼</button>
+    <button class="panel-button panel-close" id="close-btn" title="Close panel">&times;</button>
+  </div>
+  <div class="panel-content" id="panel-content">
+    <iframe class="content-iframe" id="content-iframe" scrolling="yes"></iframe>
+  </div>
+  <div class="resize-handle" id="resize-handle"></div>
+  
+  <script src="panel.js"></script>
+</body>
+</html>

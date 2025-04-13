@@ -1,6 +1,9 @@
 // Moved the initialization function to the global scope
 function initializePopup() {
   // Determine which browser API to use
+  const isInIframe = window !== window.top;
+  const interfaceModeRadios = document.querySelectorAll('input[name="interfaceMode"]');
+  const saveInterfaceModeBtn = document.getElementById('saveInterfaceModeBtn');
   const browserAPI = typeof browser !== 'undefined' ? browser : chrome;
   const isFirefox = typeof browser !== 'undefined';
   
@@ -92,7 +95,58 @@ function initializePopup() {
   const aiLoading = document.getElementById('ai-loading');
   const copyAiResponseBtn = document.getElementById('copyAiResponseBtn');
   const clearAiBtn = document.getElementById('clearAiBtn');
-  
+  if (isInIframe && captureBtn) {
+    console.log('Running in iframe - modifying capture button behavior');
+    
+    // Override the default capture button click handler
+    captureBtn.addEventListener('click', function(event) {
+      // Prevent the default handler from being triggered
+      event.stopImmediatePropagation();
+      
+      // Update status message
+      if (statusDiv) statusDiv.textContent = 'Starting capture...';
+      
+      // Notify parent window to handle capture
+      window.parent.postMessage({
+        action: 'startCapture'
+      }, '*');
+      
+      // Disable the button briefly to prevent double-clicks
+      captureBtn.disabled = true;
+      setTimeout(() => { captureBtn.disabled = false; }, 1000);
+    }, true); // true for capture phase to ensure this runs first
+    
+    // Similarly, modify AI screenshot button if it exists
+    if (captureAiScreenshotBtn) {
+      captureAiScreenshotBtn.addEventListener('click', function(event) {
+        event.stopImmediatePropagation();
+        
+        if (statusDiv) statusDiv.textContent = 'Starting capture for AI...';
+        
+        window.parent.postMessage({
+          action: 'startAiCapture'
+        }, '*');
+        
+        captureAiScreenshotBtn.disabled = true;
+        setTimeout(() => { captureAiScreenshotBtn.disabled = false; }, 1000);
+      }, true);
+    }
+    
+    // Set up listener for messages from parent window
+    window.addEventListener('message', function(event) {
+      console.log('Iframe received message:', event.data);
+      
+      // Handle screenshot processing
+      if (event.data.action === 'processScreenshot') {
+        console.log('Iframe processing screenshot');
+        
+        // Call the processScreenshot function with the data
+        if (typeof processScreenshot === 'function') {
+          processScreenshot(event.data.data);
+        }
+      }
+    });
+  }
   console.log('Popup loaded');
   
   // Helper function to show/hide elements
@@ -125,6 +179,24 @@ function initializePopup() {
         }, 3000);
       }
     }
+  }
+
+  if (aiPrompt) {
+    storageGet(['savedAiPrompt']).then(function(result) {
+      if (result.savedAiPrompt) {
+        aiPrompt.value = result.savedAiPrompt;
+      }
+    }).catch(error => {
+      console.error('Error loading saved AI prompt:', error);
+    });
+  
+    // Add event listener to save AI prompt text as it's typed
+    aiPrompt.addEventListener('input', function() {
+      // Save the current text to storage
+      storageSet({savedAiPrompt: this.value}).catch(error => {
+        console.error('Error saving AI prompt:', error);
+      });
+    });
   }
 
   // Unified storage get function that works in both browsers
@@ -361,6 +433,59 @@ function initializePopup() {
     });
     
     return headers;
+  }
+
+  storageGet(['interfaceMode']).then(function(result) {
+    const interfaceMode = result.interfaceMode || 'panel'; // Default to panel mode
+    
+    // Set the radio button
+    const interfaceModeRadio = document.querySelector(`input[name="interfaceMode"][value="${interfaceMode}"]`);
+    if (interfaceModeRadio) {
+      interfaceModeRadio.checked = true;
+    }
+  }).catch(error => {
+    console.error('Error loading interface mode setting:', error);
+  });
+  
+  // Add this to your initializePopup function where you set up other button handlers
+  
+  // Handle interface mode save
+  if (saveInterfaceModeBtn) {
+    saveInterfaceModeBtn.addEventListener('click', function() {
+      // Get selected interface mode
+      const selectedMode = document.querySelector('input[name="interfaceMode"]:checked');
+      if (!selectedMode) {
+        updateStatus('Please select an interface mode', 'error');
+        return;
+      }
+      
+      // Get the mode value
+      const newMode = selectedMode.value;
+      console.log('Saving interface mode:', newMode);
+      
+      // Save interface mode setting
+      storageSet({interfaceMode: newMode}).then(function() {
+        // Notify background script about the mode change
+        try {
+          browserAPI.runtime.sendMessage({
+            action: 'modeChanged',
+            mode: newMode
+          }).then(() => {
+            updateStatus('Interface mode saved! Changes will apply next time you click the extension icon.', 'success');
+          }).catch(error => {
+            console.error('Error notifying background script:', error);
+            // Still show success since the setting was saved
+            updateStatus('Interface mode saved! Changes will apply next time you click the extension icon.', 'success');
+          });
+        } catch (e) {
+          console.error('Error sending mode change message:', e);
+          // Still show success since the setting was saved
+          updateStatus('Interface mode saved! Changes will apply next time you click the extension icon.', 'success');
+        }
+      }).catch(error => {
+        updateStatus('Error saving interface mode setting: ' + error.message, 'error');
+      });
+    });
   }
 
   // Helper function to populate headers list from stored headers
@@ -1330,8 +1455,8 @@ function initializePopup() {
       // Hide the response container
       showElement(aiResponseContainer, false);
       
-      // Remove AI response from storage
-      storageRemove(['aiResponse']).then(function() {
+      // Remove AI response and saved prompt from storage
+      storageRemove(['aiResponse', 'savedAiPrompt']).then(function() {
         updateStatus('AI interaction cleared!', 'success');
       }).catch(error => {
         updateStatus('Error clearing AI data: ' + (error ? error.message : 'Unknown error'), 'error');
@@ -2094,6 +2219,7 @@ function initializePopup() {
       // Other symbols
       { pattern: /\\ldots/g, replacement: '…' },           // Horizontal ellipsis
       { pattern: /\\infty/g, replacement: '∞' },           // Infinity
+      { pattern: /\\,/g, replacement: ' ' },               // Thin space
       
       // Greek letters (lowercase)
       { pattern: /\\alpha/g, replacement: 'α' },
@@ -2205,6 +2331,115 @@ function initializePopup() {
     
     return formatted;
   }
+  function setupResizeObserver() {
+    // Check if we're in an iframe context
+    const isInIframe = window !== window.top;
+    
+    if (isInIframe) {
+      // Create a resize observer to watch for content size changes
+      const contentContainer = document.querySelector('.container');
+      
+      if (contentContainer) {
+        // Initial size notification
+        notifyParentOfSize();
+        
+        // Setup observer for dynamic content changes
+        const resizeObserver = new ResizeObserver(entries => {
+          notifyParentOfSize();
+        });
+        
+        // Start observing the container
+        resizeObserver.observe(contentContainer);
+        
+        // Also observe when switching tabs to adjust for different content heights
+        const tabButtons = document.querySelectorAll('.tab-button');
+        if (tabButtons) {
+          tabButtons.forEach(button => {
+            button.addEventListener('click', () => {
+              // Wait a moment for the tab content to become visible
+              setTimeout(notifyParentOfSize, 50);
+            });
+          });
+        }
+      }
+    }
+  }
+  
+  function notifyParentOfSize() {
+    const contentHeight = document.body.scrollHeight;
+    
+    // Add some padding for good measure
+    const totalHeight = contentHeight + 20;
+    
+    // Notify the parent window about the size
+    window.parent.postMessage({
+      action: 'resize',
+      height: totalHeight
+    }, '*');
+  }
+  
+  // Call this at the end of initializePopup
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', setupResizeObserver);
+  } else {
+    // DOM is already loaded, initialize immediately
+    setupResizeObserver();
+  }
+  function enableScrolling() {
+    // Check if we're in iframe
+    const isInIframe = window !== window.top;
+    
+    if (isInIframe) {
+      // Force scrolling on body
+      document.body.style.overflow = 'auto';
+      document.body.style.height = 'auto';
+      document.body.style.minHeight = '100%';
+      
+      // Force scrolling on container
+      const container = document.querySelector('.container');
+      if (container) {
+        container.style.overflow = 'visible';
+        container.style.height = 'auto';
+        container.style.minHeight = '100%';
+      }
+      
+      // Make sure all tab panes scroll properly
+      const tabPanes = document.querySelectorAll('.tab-pane');
+      tabPanes.forEach(pane => {
+        pane.style.overflow = 'visible';
+        pane.style.height = 'auto';
+      });
+      
+      // Ensure scrollable areas have scrollbars
+      const scrollableElements = document.querySelectorAll('.result, .result-editor, .prompt-editor, .headers-list, #ai-response');
+      scrollableElements.forEach(el => {
+        el.style.overflow = 'auto';
+      });
+      
+      // Adjust dimensions of specific elements that might be limiting scrolling
+      const resultContainer = document.querySelector('.result-container');
+      if (resultContainer) {
+        resultContainer.style.maxHeight = 'none';
+      }
+      
+      // Add scroll message capability
+      window.addEventListener('scroll', function() {
+        // Notify parent window of scroll position
+        window.parent.postMessage({
+          action: 'scrollUpdate',
+          scrollTop: document.documentElement.scrollTop || document.body.scrollTop
+        }, '*');
+      });
+    }
+  }
+  
+  // Call this function after the DOM is loaded
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', enableScrolling);
+  } else {
+    enableScrolling();
+  }
+  
 }
 
 // Check if the DOM is already loaded

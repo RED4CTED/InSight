@@ -7,6 +7,30 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <!-- This is the only script tag we'll use - the script loader handles the rest -->
   <script src="script-loader.js"></script>
+  <style>
+    /* Critical scrolling styles for popup */
+    html, body {
+      height: auto !important;
+      overflow: auto !important;
+      min-height: 100%;
+    }
+    
+    .container {
+      height: auto !important;
+      min-height: 100%;
+      overflow: visible !important;
+    }
+    
+    .tab-pane {
+      height: auto !important;
+      overflow: visible !important;
+    }
+    
+    /* Make scrollable areas explicitly scrollable */
+    .result, .result-editor, .prompt-editor, .headers-list, #ai-response {
+      overflow: auto !important;
+    }
+  </style>
 </head>
 <body>
   <div class="container">
@@ -394,6 +418,29 @@
             <div class="button-row">
               <button id="saveCustomAiBtn" class="action-button secondary">Save AI Settings</button>
               <button id="testCustomAiBtn" class="action-button">Test</button>
+            </div>
+          </div>
+          <div class="settings-group">
+            <h2>Interface Mode</h2>
+            <p class="info-text">Choose how the extension interface appears when you click the toolbar icon.</p>
+            
+            <div class="radio-group">
+              <label class="radio-option">
+                <input type="radio" name="interfaceMode" value="panel" checked> 
+                Panel Mode (Draggable window with scrolling)
+              </label>
+              <label class="radio-option">
+                <input type="radio" name="interfaceMode" value="popup"> 
+                Standard Popup (Browser default popup)
+              </label>
+            </div>
+            
+            <div class="info-text">
+              <em>Note: Changes to interface mode will take effect the next time you click the extension icon</em>
+            </div>
+            
+            <div class="button-row">
+              <button id="saveInterfaceModeBtn" class="action-button secondary">Save Interface Mode</button>
             </div>
           </div>
         </div>
