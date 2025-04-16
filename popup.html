@@ -5,7 +5,8 @@
   <link rel="stylesheet" href="popup.css">
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <!-- This is the only script tag we'll use - the script loader handles the rest -->
+  <script src="detect-browser.js"></script>
+  <script src="popup.js"></script>
   <script src="script-loader.js"></script>
   <style>
     /* Critical scrolling styles for popup */
@@ -245,7 +246,7 @@
         </div>
       </div>
       
-      <!-- Settings tab (unchanged, just renamed from settings-tab to settings-tab) -->
+      <!-- Settings tab -->
       <div id="settings-tab" class="tab-pane">
         <!-- OCR settings -->
         <div class="settings-group">
@@ -284,7 +285,7 @@
             </div>
           </div>
           
-          <!-- Custom OCR API settings (unchanged) -->
+          <!-- Custom OCR API settings -->
           <div id="customOcrContainer" class="hidden">
             <h3>Custom OCR API Settings</h3>
             <div class="input-group">
