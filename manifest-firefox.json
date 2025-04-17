@@ -25,10 +25,12 @@
     }
   ],
   "web_accessible_resources": [
+  "libs/marked.min.js",
+  "libs/katex.min.js",
+  "libs/katex.min.css",
   "popup.html",
   "popup.css",
   "popup.js",
-  "html2canvas.min.js",
   "browser-polyfill.js",
   "detect-browser.js",
   "script-loader.js",

@@ -942,25 +942,29 @@ browserAPI.runtime.onMessage.addListener(function(request, sender, sendResponse)
   // Handle tab capture request
   if (request.action === 'captureTab') {
     console.log('[Background] Processing capture tab request');
+    console.log('[Background] Capture intent:', request.isForAi ? 'AI' : 'OCR');
     
-    // Capture tab using appropriate method based on browser
-    const capturePromise = browserAPI.tabs.captureVisibleTab(null, {format: 'png'});
-    
-    // Handle both Promise-based (Firefox) and callback-based (Chrome) APIs
-    if (typeof browser !== 'undefined') {
-      // Firefox (Promise-based)
-      capturePromise.then(function(dataUrl) {
-        processCapture(dataUrl, request, sendResponse);
-      }).catch(function(error) {
-        console.error(`[Background] Error capturing tab: ${error.message}`);
-        sendResponse({status: 'error', message: error.message});
-      });
-    } else {
-      // Chrome (callback-based)
-      capturePromise.then(function(dataUrl) {
-        processCapture(dataUrl, request, sendResponse);
-      });
-    }
+    // Store the intent first
+    storeScreenshotIntent(request.isForAi === true).then(() => {
+      // Capture tab using appropriate method based on browser
+      const capturePromise = browserAPI.tabs.captureVisibleTab(null, {format: 'png'});
+      
+      // Handle both Promise-based (Firefox) and callback-based (Chrome) APIs
+      if (typeof browser !== 'undefined') {
+        // Firefox (Promise-based)
+        capturePromise.then(function(dataUrl) {
+          processCapture(dataUrl, request, sendResponse);
+        }).catch(function(error) {
+          console.error(`[Background] Error capturing tab: ${error.message}`);
+          sendResponse({status: 'error', message: error.message});
+        });
+      } else {
+        // Chrome (callback-based)
+        capturePromise.then(function(dataUrl) {
+          processCapture(dataUrl, request, sendResponse);
+        });
+      }
+    });
     
     return true; // Keep the messaging channel open for async response
   }
@@ -1101,12 +1105,16 @@ browserAPI.runtime.onMessage.addListener(function(request, sender, sendResponse)
 function processCapture(dataUrl, request, sendResponse) {
   console.log('[Background] Tab captured successfully');
   
+  // Include the capturingForAi flag from the request
+  const capturingForAi = request.capturingForAi || false;
+  
   // Store the screenshot and area for the popup to process
   browserAPI.storage.local.set({
     pendingScreenshot: {
       dataUrl: dataUrl,
       area: request.data
-    }
+    },
+    capturingForAi: capturingForAi // Store the flag explicitly
   }, function() {
     // Try to notify popup that a screenshot is ready for processing
     try {
@@ -1116,15 +1124,15 @@ function processCapture(dataUrl, request, sendResponse) {
         data: {
           dataUrl: dataUrl,
           area: request.data
-        }
+        },
+        capturingForAi: capturingForAi // Include flag in the message
       }, function(response) {
         if (browserAPI.runtime.lastError) {
           console.log('[Background] Message sending error:', browserAPI.runtime.lastError.message);
-          // This is normal if popup is closed, no need to handle error
         }
       });
       
-      // Also try to notify the panel in the active tab if we're in panel mode
+      // Also try to notify the panel in the active tab
       browserAPI.tabs.query({active: true, currentWindow: true}, function(tabs) {
         if (tabs && tabs.length > 0) {
           browserAPI.tabs.sendMessage(tabs[0].id, {
@@ -1132,7 +1140,8 @@ function processCapture(dataUrl, request, sendResponse) {
             data: {
               dataUrl: dataUrl,
               area: request.data
-            }
+            },
+            capturingForAi: capturingForAi // Include flag in the message
           }).catch(error => {
             console.log('[Background] Tab message error:', error);
           });
@@ -1254,5 +1263,16 @@ browserAPI.runtime.onConnect.addListener(function(port) {
     });
   }
 });
+
+function storeScreenshotIntent(isForAi) {
+  return browserAPI.storage.local.set({
+    screenshotIntent: {
+      isForAi: isForAi,
+      timestamp: Date.now()
+    }
+  }).then(() => {
+    console.log(`[Background] Screenshot intent stored: ${isForAi ? 'AI' : 'OCR'}`);
+  });
+}
 
 console.log('Background script loaded');

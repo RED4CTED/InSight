@@ -96,101 +96,103 @@ function startCapture() {
     e.stopPropagation();
   }
   
-  function handleMouseUp(e) {
-    if (!isSelecting) return;
+  // In content.js - Modify handleMouseUp in startCapture function
+function handleMouseUp(e) {
+  if (!isSelecting) return;
+  
+  debug('Mouse up detected - selection complete');
+  isSelecting = false;
+  
+  // Get final selection coordinates
+  const left = parseFloat(selectionBox.style.left);
+  const top = parseFloat(selectionBox.style.top);
+  const width = parseFloat(selectionBox.style.width);
+  const height = parseFloat(selectionBox.style.height);
+  
+  debug(`Selection area: ${left},${top} ${width}x${height}`);
+  
+  // Remove all event listeners
+  document.removeEventListener('mousedown', handleMouseDown, true);
+  document.removeEventListener('mousemove', handleMouseMove, true);
+  document.removeEventListener('mouseup', handleMouseUp, true);
+  document.removeEventListener('keydown', handleKeyDown, true);
+  
+  // Remove overlay and instructions
+  document.body.removeChild(overlay);
+  document.body.removeChild(instructions);
+  
+  // Only capture if selection has a reasonable size
+  if (width > 10 && height > 10) {
+    debug('Selection size valid, capturing...');
+    selectionBox.style.display = 'none';
     
-    debug('Mouse up detected - selection complete');
-    isSelecting = false;
+    // Get page zoom level and device pixel ratio for accurate coordinates
+    const zoomLevel = window.devicePixelRatio || 1;
     
-    // Get final selection coordinates (fixed, not integers)
-    const left = parseFloat(selectionBox.style.left);
-    const top = parseFloat(selectionBox.style.top);
-    const width = parseFloat(selectionBox.style.width);
-    const height = parseFloat(selectionBox.style.height);
+    // Get scroll position
+    const scrollX = window.scrollX;
+    const scrollY = window.scrollY;
     
-    debug(`Selection area: ${left},${top} ${width}x${height}`);
+    // Get window dimensions
+    const windowWidth = window.innerWidth;
+    const windowHeight = window.innerHeight;
     
-    // Remove all event listeners
-    document.removeEventListener('mousedown', handleMouseDown, true);
-    document.removeEventListener('mousemove', handleMouseMove, true);
-    document.removeEventListener('mouseup', handleMouseUp, true);
-    document.removeEventListener('keydown', handleKeyDown, true);
+    debug(`Window: ${windowWidth}x${windowHeight}, Zoom: ${zoomLevel}, Scroll: ${scrollX},${scrollY}`);
     
-    // Remove overlay and instructions
-    document.body.removeChild(overlay);
-    document.body.removeChild(instructions);
-    
-    // Only capture if selection has a reasonable size
-    if (width > 10 && height > 10) {
-      debug('Selection size valid, capturing...');
-      selectionBox.style.display = 'none';
+    // Delay the capture slightly to ensure the UI is fully updated
+    setTimeout(() => {
+      // Capture the screenshot with all metadata for accurate cropping
+      const messageData = {
+        action: 'captureTab',
+        isForAi: window.capturingForAi === true, // Include the flag
+        data: {
+          left: left,
+          top: top,
+          width: width,
+          height: height,
+          zoomLevel: zoomLevel,
+          scrollX: scrollX,
+          scrollY: scrollY,
+          windowWidth: windowWidth,
+          windowHeight: windowHeight
+        }
+      };
       
-      // Get page zoom level and device pixel ratio for accurate coordinates
-      const zoomLevel = window.devicePixelRatio || 1;
-      
-      // Get scroll position
-      const scrollX = window.scrollX;
-      const scrollY = window.scrollY;
-      
-      // Get window dimensions
-      const windowWidth = window.innerWidth;
-      const windowHeight = window.innerHeight;
-      
-      debug(`Window: ${windowWidth}x${windowHeight}, Zoom: ${zoomLevel}, Scroll: ${scrollX},${scrollY}`);
-      
-      // Delay the capture slightly to ensure the UI is fully updated
-      setTimeout(() => {
-        // Capture the screenshot with all metadata for accurate cropping
-        const messageData = {
-          action: 'captureTab',
-          data: {
-            left: left,
-            top: top,
-            width: width,
-            height: height,
-            zoomLevel: zoomLevel,
-            scrollX: scrollX,
-            scrollY: scrollY,
-            windowWidth: windowWidth,
-            windowHeight: windowHeight
+      // Send message using browser-appropriate method
+      browserAPI.runtime.sendMessage(messageData)
+        .then(response => {
+          debug('Sent capture request to background script');
+          // Remove selection box after sending the request
+          if (selectionBox && selectionBox.parentNode) {
+            document.body.removeChild(selectionBox);
+            selectionBox = null;
           }
-        };
-        
-        // Send message using browser-appropriate method
-        browserAPI.runtime.sendMessage(messageData)
-          .then(response => {
-            debug('Sent capture request to background script');
-            // Remove selection box after sending the request
+        })
+        .catch(error => {
+          debug('Error sending message: ' + (error ? error.message : 'unknown error'));
+          
+          // For Chrome (doesn't support promises for sendMessage)
+          if (typeof browser === 'undefined') {
+            // Just cleanup in Chrome as the error is expected
             if (selectionBox && selectionBox.parentNode) {
               document.body.removeChild(selectionBox);
               selectionBox = null;
             }
-          })
-          .catch(error => {
-            debug('Error sending message: ' + (error ? error.message : 'unknown error'));
-            
-            // For Chrome (doesn't support promises for sendMessage)
-            if (typeof browser === 'undefined') {
-              // Just cleanup in Chrome as the error is expected
-              if (selectionBox && selectionBox.parentNode) {
-                document.body.removeChild(selectionBox);
-                selectionBox = null;
-              }
-            }
-          });
-      }, 100);
-    } else {
-      debug('Selection too small, aborting');
-      // Remove selection box
-      if (selectionBox && selectionBox.parentNode) {
-        document.body.removeChild(selectionBox);
-        selectionBox = null;
-      }
+          }
+        });
+    }, 100);
+  } else {
+    debug('Selection too small, aborting');
+    // Remove selection box
+    if (selectionBox && selectionBox.parentNode) {
+      document.body.removeChild(selectionBox);
+      selectionBox = null;
     }
-    
-    e.preventDefault();
-    e.stopPropagation();
   }
+  
+  e.preventDefault();
+  e.stopPropagation();
+}
   
   function handleKeyDown(e) {
     if (e.key === 'Escape') {
@@ -231,6 +233,8 @@ browserAPI.runtime.onMessage.addListener((request, sender, sendResponse) => {
   debug(`Message received: ${request.action}`);
   
   if (request.action === 'startCapture') {
+    // Store the flag in window for later access
+    window.capturingForAi = request.capturingForAi === true;
     startCapture();
     sendResponse({status: 'ok'});
   }

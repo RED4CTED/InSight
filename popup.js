@@ -392,6 +392,34 @@ const UIManager = {
     this.elements.saveCustomAiBtn = document.getElementById('saveCustomAiBtn');
     this.elements.testCustomAiBtn = document.getElementById('testCustomAiBtn');
     
+    if (this.elements.loadingDiv) {
+      this.elements.loadingDiv.classList.add('hidden');
+    }
+    
+    if (this.elements.aiLoading) {
+      this.elements.aiLoading.classList.add('hidden');
+    }
+    
+    if (this.elements.resultTextarea) {
+      const defaultText = 'No text extracted yet.';
+      if (this.elements.resultTextarea.value.trim() === '') {
+        this.elements.resultTextarea.value = defaultText;
+      }
+      
+      // Disable buttons if no text or default text
+      if (this.elements.copyBtn) {
+        this.elements.copyBtn.disabled = this.elements.resultTextarea.value === defaultText;
+      }
+      
+      if (this.elements.clearBtn) {
+        this.elements.clearBtn.disabled = this.elements.resultTextarea.value === defaultText;
+      }
+      
+      if (this.elements.sendToAiTabBtn) {
+        this.elements.sendToAiTabBtn.disabled = this.elements.resultTextarea.value === defaultText;
+      }
+    }
+
     console.log('UI elements initialized');
   },
   
@@ -887,6 +915,18 @@ const OCRManager = {
     UIManager.updateStatus('Sending OCR request to background...', '');
     UIManager.showElement(UIManager.elements.loadingDiv, true);
     
+    // Clear previous OCR results from storage before starting a new request
+    StorageManager.remove(['extractedText']).then(() => {
+      console.log('Previous OCR results cleared');
+    }).catch(error => {
+      console.error('Error clearing previous OCR results:', error);
+    });
+    
+    // Clear UI elements
+    const { resultTextarea, aiResponseDiv } = UIManager.elements;
+    if (resultTextarea) resultTextarea.value = 'Processing...';
+    if (aiResponseDiv) aiResponseDiv.innerHTML = '';
+    
     StorageManager.get(['ocrService', 'ocrspaceApiKey', 'serverUrl', 'customOcrSettings'])
       .then(result => {
         const ocrService = result.ocrService || 'local';
@@ -940,6 +980,10 @@ const OCRManager = {
     console.log('Text extracted successfully');
     UIManager.showElement(UIManager.elements.loadingDiv, false);
     
+    StorageManager.remove(['currentOCRRequestId']).catch(error => {
+      console.error('Error clearing OCR request ID:', error);
+    });
+
     if (text.trim().length === 0) {
       text = "No text was detected in the selected area.";
     }
@@ -986,6 +1030,9 @@ const OCRManager = {
    */
   handleOcrError: function(error) {
     UIManager.showElement(UIManager.elements.loadingDiv, false);
+    StorageManager.remove(['currentOCRRequestId']).catch(error => {
+      console.error('Error clearing OCR request ID:', error);
+    });
     console.error('Text extraction error:', error);
     UIManager.updateStatus('Error during text extraction: ' + (error ? error.message : 'Unknown error'), 'error');
     
@@ -1434,10 +1481,16 @@ const AIManager = {
    * @param {string} text - AI response text
    */
   handleAiResponse: function(response) {
+    StateManager.setAiLoading(false);
+  
     const cleanedResponse = FormatUtils.cleanSystemMessages(response);
-    UIManager.showElement(UIManager.elements.aiLoading, false);
     UIManager.showElement(UIManager.elements.aiResponseContainer, true);
     
+    // Clear the request ID
+    StorageManager.remove(['currentAIRequestId']).catch(error => {
+      console.error('Error clearing AI request ID:', error);
+    });
+
     const { aiResponseDiv } = UIManager.elements;
     if (aiResponseDiv) {
       FormatUtils.formatMarkdown(cleanedResponse).then(formattedHtml => {
@@ -1467,7 +1520,8 @@ const AIManager = {
    * @param {Error} error - Error object
    */
   handleAiError: function(error) {
-    UIManager.showElement(UIManager.elements.aiLoading, false);
+    // Set loading state to false
+    StateManager.setAiLoading(false);
     UIManager.updateStatus('Error from AI: ' + (error ? error.message : 'Unknown error'), 'error');
   },
   
@@ -1484,8 +1538,19 @@ const AIManager = {
       return;
     }
     
-    UIManager.showElement(UIManager.elements.aiLoading, true);
+    StateManager.setAiLoading(true);
     UIManager.updateStatus('Sending AI request to background...', '');
+    
+    // Clear previous results before starting new request
+    StorageManager.remove(['aiResponse']).catch(error => {
+      console.error('Error clearing previous results:', error);
+    });
+      
+    // Clear UI elements
+    const { aiResponseDiv, aiResponseContainer } = UIManager.elements;
+    if (aiResponseDiv) aiResponseDiv.innerHTML = '';
+    UIManager.showElement(aiResponseContainer, false);
+    
     
     // Get selected AI service
     StorageManager.get(['aiService']).then(result => {
@@ -1617,7 +1682,45 @@ const AIManager = {
         useOcrImageBtn.disabled = true;
       }
     });
+  },
+
+  // In AIManager - Add these new functions
+setLoadingState: function(isLoading) {
+  // Update UI
+  if (UIManager.elements.aiLoading) {
+    if (isLoading) {
+      UIManager.elements.aiLoading.classList.remove('hidden');
+    } else {
+      UIManager.elements.aiLoading.classList.add('hidden');
+    }
   }
+  
+  // Update storage flag
+  StorageManager.set({aiLoadingActive: isLoading}).catch(error => {
+    console.error('Error updating AI loading state:', error);
+  });
+},
+
+// Check if there's an active AI request
+checkActiveRequest: function() {
+  return StorageManager.get(['currentAIRequestId', 'aiLoadingActive']).then(result => {
+    const hasActiveRequest = !!result.currentAIRequestId;
+    const loadingActive = !!result.aiLoadingActive;
+    
+    // If no active request but loading is shown, clear it
+    if (!hasActiveRequest && loadingActive) {
+      this.setLoadingState(false);
+    }
+    
+    // If active request, ensure loading is shown
+    if (hasActiveRequest && !loadingActive) {
+      this.setLoadingState(true);
+    }
+    
+    return hasActiveRequest;
+  });
+}
+
 };
 
 // ==========================================
@@ -2111,6 +2214,20 @@ const EventHandlers = {
     UIManager.updateStatus('Starting capture...', '');
     this.disabled = true;
     
+    // Set the flag to ensure we know this is NOT for AI
+    window.capturingForAi = false;
+    
+    // Set flag in storage to ensure it persists
+    StorageManager.set({
+      capturingForAi: false,
+      lastCaptureMode: 'ocr'
+    }).then(() => {
+      // Continue with existing code...
+    }).catch(error => {
+      this.disabled = false;
+      UIManager.updateStatus('Error setting capture mode: ' + error.message, 'error');
+    });
+    
     const { resultTextarea, copyBtn, clearBtn, sendToAiBtn, previewContainer, aiResponseContainer, aiResponseDiv } = UIManager.elements;
     
     // Clear previous data before starting a new capture
@@ -2179,38 +2296,49 @@ const EventHandlers = {
   /**
    * Handle clear button click
    */
-  handleClearClick: function() {
-    const { resultTextarea, copyBtn, clearBtn, sendToAiBtn, sendToAiTabBtn, previewContainer, aiResponseContainer, aiResponseDiv, useOcrImageBtn } = UIManager.elements;
+  // In popup.js - Update handleClearClick function
+handleClearClick: function() {
+  const { resultTextarea, copyBtn, clearBtn, sendToAiBtn, sendToAiTabBtn, previewContainer, aiResponseContainer, aiResponseDiv, useOcrImageBtn } = UIManager.elements;
+  
+  // Update UI elements
+  if (resultTextarea) resultTextarea.value = 'No text extracted yet.';
+  if (copyBtn) copyBtn.disabled = true;
+  if (clearBtn) clearBtn.disabled = true;
+  if (sendToAiBtn) sendToAiBtn.disabled = true;
+  if (sendToAiTabBtn) sendToAiTabBtn.disabled = true;
+  
+  // Hide preview containers
+  UIManager.showElement(previewContainer, false);
+  UIManager.showElement(aiResponseContainer, false);
+  
+  // Clear AI response from the DOM
+  if (aiResponseDiv) {
+    aiResponseDiv.innerHTML = '';
+  }
+  
+  // Use Promise.all to ensure all storage operations complete
+  Promise.all([
+    // Remove stored data
+    StorageManager.remove(['extractedText']),
+    StorageManager.remove(['pendingScreenshot']),
+    StorageManager.remove(['previewImage']),
+    StorageManager.remove(['aiResponse'])
+  ]).then(() => {
+    console.log('All data successfully cleared');
+    UIManager.updateStatus('Cleared!', 'success');
     
-    if (resultTextarea) resultTextarea.value = 'No text extracted yet.';
-    if (copyBtn) copyBtn.disabled = true;
-    if (clearBtn) clearBtn.disabled = true;
-    if (sendToAiBtn) sendToAiBtn.disabled = true;
-    if (sendToAiTabBtn) sendToAiTabBtn.disabled = true;
+    // Reset the OCR image
+    OCRManager.currentOcrImage = null;
     
-    UIManager.showElement(previewContainer, false);
-    UIManager.showElement(aiResponseContainer, false);
-    
-    // Clear AI response from the DOM
-    if (aiResponseDiv) {
-      aiResponseDiv.innerHTML = '';
+    // Disable the "Use OCR Image" button in the AI tab
+    if (useOcrImageBtn) {
+      useOcrImageBtn.disabled = true;
     }
-    
-    // Remove all stored data including AI response
-    StorageManager.remove(['extractedText', 'pendingScreenshot', 'previewImage', 'aiResponse']).then(function() {
-      UIManager.updateStatus('Cleared!', 'success');
-      
-      // Reset the OCR image
-      OCRManager.currentOcrImage = null;
-      
-      // Disable the "Use OCR Image" button in the AI tab
-      if (useOcrImageBtn) {
-        useOcrImageBtn.disabled = true;
-      }
-    }).catch(error => {
-      UIManager.updateStatus('Error clearing data: ' + (error ? error.message : 'Unknown error'), 'error');
-    });
-  },
+  }).catch(error => {
+    console.error('Error during clear operation:', error);
+    UIManager.updateStatus('Error clearing data: ' + (error ? error.message : 'Unknown error'), 'error');
+  });
+},
   
   /**
    * Handle result textarea change
@@ -2377,9 +2505,14 @@ const EventHandlers = {
     UIManager.updateStatus('Starting capture for AI...', '');
     this.disabled = true;
     
-    // Store a flag to indicate we're capturing for AI
-    StorageManager.set({capturingForAi: true}).then(function() {
-      // Proceed with capture similar to the original capture button
+    // Set the flag directly in window for content script
+    window.capturingForAi = true;
+    
+    // Set flag in storage to ensure it persists
+    StorageManager.set({
+      capturingForAi: true,
+      lastCaptureMode: 'ai'
+    }).then(() => {
       const browserAPI = StorageManager.getBrowserAPI();
       
       browserAPI.tabs.query({active: true, currentWindow: true}).then(function(tabs) {
@@ -2389,7 +2522,10 @@ const EventHandlers = {
           return;
         }
         
-        browserAPI.tabs.sendMessage(tabs[0].id, {action: 'startCapture'}).then(function(response) {
+        browserAPI.tabs.sendMessage(tabs[0].id, {
+          action: 'startCapture',
+          capturingForAi: true
+        }).then(function(response) {
           this.disabled = false;
           
           if (response && response.status === 'ok') {
@@ -2405,9 +2541,9 @@ const EventHandlers = {
         this.disabled = false;
         UIManager.updateStatus('Error: ' + (error ? error.message : 'Unknown error'), 'error');
       });
-    }.bind(this)).catch(error => {
+    }).catch(error => {
       this.disabled = false;
-      UIManager.updateStatus('Error setting capture mode: ' + (error ? error.message : 'Unknown error'), 'error');
+      UIManager.updateStatus('Error setting capture mode: ' + error.message, 'error');
     });
   },
   
@@ -2479,19 +2615,24 @@ const EventHandlers = {
     // Clear the AI image
     AIManager.currentAiImage = null;
     
-    // Hide the preview
+    // Hide elements
     UIManager.showElement(aiPreviewContainer, false);
+    UIManager.showElement(aiResponseContainer, false);
     
     // Clear AI response from the DOM
     if (aiResponseDiv) {
       aiResponseDiv.innerHTML = '';
     }
     
-    // Hide the response container
-    UIManager.showElement(aiResponseContainer, false);
+    // Force loading state to false
+    StateManager.setAiLoading(false);
     
-    // Remove AI response and saved prompt from storage
-    StorageManager.remove(['aiResponse', 'savedAiPrompt']).then(function() {
+    // Remove AI response, request ID, and any other AI-related data
+    Promise.all([
+      StorageManager.remove(['aiResponse']),
+      StorageManager.remove(['savedAiPrompt']),
+      StorageManager.remove(['currentAIRequestId'])
+    ]).then(() => {
       UIManager.updateStatus('AI interaction cleared!', 'success');
     }).catch(error => {
       UIManager.updateStatus('Error clearing AI data: ' + (error ? error.message : 'Unknown error'), 'error');
@@ -2930,12 +3071,120 @@ const EventHandlers = {
 };
 
 // Function to check for pending screenshots and process them
+// In popup.js - Update the checkPendingScreenshot function
 function checkPendingScreenshot() {
-  StorageManager.get(['pendingScreenshot']).then(function(result) {
+  StorageManager.get(['pendingScreenshot', 'capturingForAi', 'lastCaptureMode', 'screenshotIntent']).then(function(result) {
     if (result.pendingScreenshot) {
-      UIManager.updateStatus('Processing pending screenshot...', '');
-      UIManager.showElement(UIManager.elements.loadingDiv, true);
-      OCRManager.processScreenshot(result.pendingScreenshot);
+      // Determine if this screenshot is for AI based on multiple potential flags
+      const isForAi = result.capturingForAi === true || 
+                      result.lastCaptureMode === 'ai' ||
+                      (result.screenshotIntent && result.screenshotIntent.isForAi);
+      
+      console.log('Processing pending screenshot, isForAi:', isForAi);
+      
+      // First, crop the screenshot regardless of where it will be used
+      UIManager.updateStatus('Cropping screenshot...', '');
+      
+      // Load the image to crop it
+      const img = new Image();
+      img.onload = () => {
+        console.log('Screenshot loaded, dimensions:', img.width, 'x', img.height);
+        
+        try {
+          // Create canvas for cropping
+          const canvas = document.createElement('canvas');
+          const ctx = canvas.getContext('2d');
+          
+          // Calculate proper crop coordinates based on zoom and scroll
+          const area = result.pendingScreenshot.area;
+          
+          // Apply scaling factors for different viewport sizes
+          const imgScale = {
+            x: img.width / area.windowWidth,
+            y: img.height / area.windowHeight
+          };
+          
+          console.log('Image scale factors:', imgScale);
+          
+          // Calculate final crop coordinates
+          const cropX = area.left * imgScale.x;
+          const cropY = area.top * imgScale.y;
+          const cropWidth = area.width * imgScale.x;
+          const cropHeight = area.height * imgScale.y;
+          
+          // Set canvas dimensions to match selected area
+          canvas.width = cropWidth;
+          canvas.height = cropHeight;
+          
+          console.log('Original selection:', area.left, area.top, area.width, area.height);
+          console.log('Final crop coordinates:', cropX, cropY, cropWidth, cropHeight);
+          
+          // Draw the cropped region
+          ctx.drawImage(img, 
+                      cropX, cropY, 
+                      cropWidth, cropHeight, 
+                      0, 0, 
+                      cropWidth, cropHeight);
+          
+          const croppedDataUrl = canvas.toDataURL('image/png');
+          console.log('Image cropped');
+          
+          // Show preview image in appropriate tab based on intent
+          if (isForAi) {
+            console.log('This screenshot is for AI processing');
+            
+            // Switch to AI tab before processing
+            const aiTabButton = document.querySelector('.tab-button[data-tab="ai"]');
+            if (aiTabButton) {
+              console.log('Switching to AI tab');
+              aiTabButton.click();
+              
+              // Short delay to ensure tab switch completes
+              setTimeout(() => {
+                // Use the CROPPED screenshot for AI
+                AIManager.currentAiImage = croppedDataUrl;
+                
+                // Show preview in AI tab
+                UIManager.showAiPreviewImage(croppedDataUrl);
+                
+                // Clear all the flags and data we no longer need
+                StorageManager.remove(['pendingScreenshot', 'capturingForAi', 'lastCaptureMode', 'screenshotIntent']).then(function() {
+                  UIManager.updateStatus('Screenshot captured for AI!', 'success');
+                }).catch(error => {
+                  console.error('Error clearing pending screenshot:', error);
+                });
+              }, 100);
+            } else {
+              console.error('Could not find AI tab button');
+            }
+          } else {
+            console.log('This screenshot is for OCR processing');
+            // Regular OCR processing
+            UIManager.showPreviewImage(croppedDataUrl);
+            
+            // Store preview for future loading
+            StorageManager.set({previewImage: croppedDataUrl}).catch(error => {
+              console.error('Error saving preview image:', error);
+            });
+            
+            // Process with OCR
+            OCRManager.processWithSelectedService(croppedDataUrl);
+          }
+          
+        } catch (error) {
+          UIManager.showElement(UIManager.elements.loadingDiv, false);
+          console.error('Error processing image:', error);
+          UIManager.updateStatus('Error processing image: ' + (error ? error.message : 'Unknown error'), 'error');
+        }
+      };
+      
+      img.onerror = function(e) {
+        UIManager.showElement(UIManager.elements.loadingDiv, false);
+        console.error('Failed to load screenshot image', e);
+        UIManager.updateStatus('Error loading screenshot', 'error');
+      };
+      
+      img.src = result.pendingScreenshot.dataUrl;
     }
   }).catch(error => {
     console.error('Error checking for pending screenshot:', error);
@@ -3072,24 +3321,36 @@ function loadSettings() {
   
   // Load any existing results from storage
   StorageManager.get(['extractedText', 'aiResponse']).then(function(result) {
-    const { resultTextarea, copyBtn, clearBtn, sendToAiBtn } = UIManager.elements;
+  const { resultTextarea, copyBtn, clearBtn, sendToAiBtn, sendToAiTabBtn } = UIManager.elements;
+  
+  // Handle extracted text
+  if (result.extractedText && 
+      result.extractedText !== 'No text extracted yet.' && 
+      result.extractedText.trim() !== '' && 
+      resultTextarea) {
     
-    // Handle extracted text
-    if (result.extractedText && resultTextarea) {
-      resultTextarea.value = result.extractedText;
-      if (copyBtn) copyBtn.disabled = false;
-      if (clearBtn) clearBtn.disabled = false;
-      if (sendToAiBtn) sendToAiBtn.disabled = false;
-      
-      // Also check for a saved preview image
-      StorageManager.get(['previewImage']).then(function(result) {
-        if (result.previewImage) {
-          UIManager.showPreviewImage(result.previewImage);
-        }
-      }).catch(error => {
-        console.error('Error loading preview image:', error);
-      });
-    }
+    resultTextarea.value = result.extractedText;
+    if (copyBtn) copyBtn.disabled = false;
+    if (clearBtn) clearBtn.disabled = false;
+    if (sendToAiBtn) sendToAiBtn.disabled = false;
+    if (sendToAiTabBtn) sendToAiTabBtn.disabled = false;
+    
+    // Also check for a saved preview image
+    StorageManager.get(['previewImage']).then(function(result) {
+      if (result.previewImage) {
+        UIManager.showPreviewImage(result.previewImage);
+      }
+    }).catch(error => {
+      console.error('Error loading preview image:', error);
+    });
+  } else {
+    // Ensure default state if no valid text
+    if (resultTextarea) resultTextarea.value = 'No text extracted yet.';
+    if (copyBtn) copyBtn.disabled = true;
+    if (clearBtn) clearBtn.disabled = true;
+    if (sendToAiBtn) sendToAiBtn.disabled = true;
+    if (sendToAiTabBtn) sendToAiTabBtn.disabled = true;
+  }
     
     // Handle AI response if it exists
     const { aiResponseDiv, aiResponseContainer } = UIManager.elements;
@@ -3114,13 +3375,143 @@ function loadSettings() {
   });
 }
 
+function cleanupStorage() {
+  console.log('Running storage cleanup');
+  
+  StorageManager.get(null).then(allData => {
+    const now = Date.now();
+    const keysToRemove = [];
+    
+    // Look for stale request IDs (older than 5 minutes)
+    Object.keys(allData).forEach(key => {
+      if (key.startsWith('request_') && allData[key].timestamp) {
+        if (now - allData[key].timestamp > 5 * 60 * 1000) {
+          keysToRemove.push(key);
+        }
+      }
+    });
+    
+    // If we have requests to remove, clear them and related data
+    if (keysToRemove.length > 0) {
+      console.log('Removing stale data:', keysToRemove);
+      
+      // Also look for any related loading states
+      if (keysToRemove.some(k => k.includes('_ai_'))) {
+        StateManager.setAiLoading(false);
+      }
+      if (keysToRemove.some(k => k.includes('_ocr_'))) {
+        StateManager.setOcrLoading(false);
+      }
+      
+      // Remove the keys
+      StorageManager.remove(keysToRemove).catch(error => {
+        console.error('Error removing stale data:', error);
+      });
+    }
+  }).catch(error => {
+    console.error('Error during storage cleanup:', error);
+  });
+}
+
 /**
  * Main initialization function - The entry point for popup modules
  * This is called by the script-loader.js when everything is ready
  */
 function initializePopup() {
   console.log('Starting popup initialization');
+  // Force hide loading indicators at startup
+  UIManager.initElements();
+  console.log('UI elements initialized');
   
+  StorageManager.get([StateManager.keys.LAST_RESET]).then(result => {
+    const lastReset = result[StateManager.keys.LAST_RESET] || 0;
+    const now = Date.now();
+    
+    // If more than 30 seconds since last reset, do a full reset
+    if (now - lastReset > 30000) {
+      console.log('More than 30 seconds since last reset, performing full reset');
+      StateManager.resetAllStates();
+    } else {
+      // Otherwise, just apply current states
+      StateManager.applyCurrentStates();
+    }
+  }).catch(error => {
+    console.error('Error checking state reset time:', error);
+    // On error, do a full reset to be safe
+    StateManager.resetAllStates();
+  });
+
+  // Force hide AI loading indicator immediately 
+  if (UIManager.elements.loadingDiv) {
+    UIManager.elements.loadingDiv.classList.add('hidden');
+  }
+  if (UIManager.elements.aiLoading) {
+    UIManager.elements.aiLoading.classList.add('hidden');
+  }
+  
+  Promise.all([
+    OCRManager.checkActiveRequest && OCRManager.checkActiveRequest(),
+    AIManager.checkActiveRequest()
+  ]).catch(error => {
+    console.error('Error checking active requests:', error);
+  });
+
+  // Clear any stale loading flags
+  StorageManager.remove(['aiLoading']).catch(error => {
+    console.error('Error clearing aiLoading flag:', error);
+  });
+  UIManager.showElement(UIManager.elements.loadingDiv, false);
+  UIManager.showElement(UIManager.elements.aiLoading, false);
+  
+  // Check for active processes
+  StorageManager.get(['currentOCRRequestId', 'currentAIRequestId']).then(result => {
+    // Only show loading if there's an actual active request
+    const hasActiveOcrRequest = !!result.currentOCRRequestId;
+    const hasActiveAiRequest = !!result.currentAIRequestId;
+    
+    // Update loading indicators based on actual active requests
+    UIManager.showElement(UIManager.elements.loadingDiv, hasActiveOcrRequest);
+    UIManager.showElement(UIManager.elements.aiLoading, hasActiveAiRequest);
+    
+    // If no active requests, remove any stale request IDs
+    if (!hasActiveOcrRequest && !hasActiveAiRequest) {
+      StorageManager.remove(['currentOCRRequestId', 'currentAIRequestId']).catch(error => {
+        console.error('Error clearing stale request IDs:', error);
+      });
+    }
+  }).catch(error => {
+    console.error('Error checking active requests:', error);
+  });
+
+  StorageManager.get(['screenshotIntent']).then(result => {
+    const intent = result.screenshotIntent;
+    
+    if (intent && (Date.now() - intent.timestamp < 60000)) { // Valid if less than 1 minute old
+      console.log('Found screenshot intent:', intent.isForAi ? 'AI' : 'OCR');
+      
+      // If screenshot was for AI, ensure we're on AI tab
+      if (intent.isForAi) {
+        console.log('Switching to AI tab because of screenshot intent');
+        // Find and click the AI tab button
+        const aiTabButton = document.querySelector('.tab-button[data-tab="ai"]');
+        if (aiTabButton) {
+          // Use setTimeout to ensure this happens after tab initialization
+          setTimeout(() => {
+            console.log('Clicking AI tab button');
+            aiTabButton.click();
+          }, 50);
+        }
+      }
+      
+      // Clear the intent
+      StorageManager.remove(['screenshotIntent']).catch(err => {
+        console.error('Error clearing screenshot intent:', err);
+      });
+    }
+  }).catch(err => {
+    console.error('Error checking screenshot intent:', err);
+  });
+
   // Check if we're in an iframe
   const isInIframe = window !== window.top;
   console.log('Running in iframe:', isInIframe);
@@ -3316,6 +3707,123 @@ window.initializePopupModules = function() {
       statusDiv.textContent = 'An error occurred during initialization. Check console for details.';
       statusDiv.style.color = 'red';
     }
+  }
+  cleanupStorage();
+};
+
+const StateManager = {
+  // Keys for storage
+  keys: {
+    AI_LOADING: 'ai_loading_state',
+    OCR_LOADING: 'ocr_loading_state',
+    LAST_RESET: 'state_last_reset'
+  },
+  
+  // Reset all temporary states
+  resetAllStates: function() {
+    console.log('Resetting all extension states');
+    
+    // Store reset timestamp
+    const resetData = {
+      [this.keys.AI_LOADING]: false,
+      [this.keys.OCR_LOADING]: false,
+      [this.keys.LAST_RESET]: Date.now()
+    };
+    
+    // Clear loading UI immediately
+    if (UIManager.elements.aiLoading) {
+      UIManager.elements.aiLoading.classList.add('hidden');
+    }
+    if (UIManager.elements.loadingDiv) {
+      UIManager.elements.loadingDiv.classList.add('hidden');
+    }
+    
+    return StorageManager.set(resetData);
+  },
+  
+  // Set AI loading state
+  setAiLoading: function(isLoading) {
+    console.log('Setting AI loading state:', isLoading);
+    
+    // Update UI
+    if (UIManager.elements.aiLoading) {
+      if (isLoading) {
+        UIManager.elements.aiLoading.classList.remove('hidden');
+      } else {
+        UIManager.elements.aiLoading.classList.add('hidden');
+      }
+    }
+    
+    // Update storage
+    return StorageManager.set({
+      [this.keys.AI_LOADING]: isLoading
+    });
+  },
+  
+  // Check current states and apply them
+  applyCurrentStates: function() {
+    console.log('Applying current states');
+    
+    return StorageManager.get([
+      this.keys.AI_LOADING, 
+      this.keys.OCR_LOADING,
+      'currentAIRequestId',
+      'currentOCRRequestId'
+    ]).then(result => {
+      // Check if there's an active AI request
+      const hasAiRequest = !!result.currentAIRequestId;
+      const aiLoadingState = !!result[this.keys.AI_LOADING];
+      
+      // Only show loading if there's an actual active request
+      if (UIManager.elements.aiLoading) {
+        if (hasAiRequest && aiLoadingState) {
+          UIManager.elements.aiLoading.classList.remove('hidden');
+        } else {
+          UIManager.elements.aiLoading.classList.add('hidden');
+          
+          // If loading state is on but no request, fix it
+          if (aiLoadingState && !hasAiRequest) {
+            this.setAiLoading(false);
+          }
+        }
+      }
+      
+      // Similar logic for OCR loading
+      const hasOcrRequest = !!result.currentOCRRequestId;
+      const ocrLoadingState = !!result[this.keys.OCR_LOADING];
+      
+      if (UIManager.elements.loadingDiv) {
+        if (hasOcrRequest && ocrLoadingState) {
+          UIManager.elements.loadingDiv.classList.remove('hidden');
+        } else {
+          UIManager.elements.loadingDiv.classList.add('hidden');
+          
+          // If loading state is on but no request, fix it
+          if (ocrLoadingState && !hasOcrRequest) {
+            this.setOcrLoading(false);
+          }
+        }
+      }
+    });
+  },
+  
+  // Set OCR loading state
+  setOcrLoading: function(isLoading) {
+    console.log('Setting OCR loading state:', isLoading);
+    
+    // Update UI
+    if (UIManager.elements.loadingDiv) {
+      if (isLoading) {
+        UIManager.elements.loadingDiv.classList.remove('hidden');
+      } else {
+        UIManager.elements.loadingDiv.classList.add('hidden');
+      }
+    }
+    
+    // Update storage
+    return StorageManager.set({
+      [this.keys.OCR_LOADING]: isLoading
+    });
   }
 };
 
