@@ -30,14 +30,15 @@
   "web_accessible_resources": [
   {
     "resources": [
-      "popup.html", 
-      "popup.css", 
-      "popup.js", 
-      "script-loader.js", 
-      "panel-styles.css",
-      "panel.html",
-      "panel.js"
-    ],
+        "libs/marked.min.js",
+        "libs/katex.min.js",
+        "libs/katex.min.css",
+        "popup.html",
+        "popup.css",
+        "popup.js",
+        "panel.html",
+        "panel.js"
+      ],
     "matches": ["<all_urls>"]
   }
 ],

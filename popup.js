@@ -96,178 +96,158 @@ const StorageManager = {
 // ==========================================
 // FORMAT UTILS - Text formatting utilities
 // ==========================================
+// FormatUtils module using proper libraries
 const FormatUtils = {
+  // Track if libraries are loaded
+  librariesLoaded: {
+    marked: false,
+    katex: false
+  },
+
   /**
-   * Format markdown text to HTML
-   * @param {string} text - Markdown text
-   * @returns {string} - HTML formatted text
+   * Load required libraries
+   * @returns {Promise} Promise that resolves when libraries are loaded
    */
-  formatMarkdown: function(text) {
+  loadLibraries: function() {
+    // Only load libraries once
+    if (this.librariesLoaded.marked && this.librariesLoaded.katex) {
+      return Promise.resolve();
+    }
+
+    return new Promise((resolve, reject) => {
+      // Get URLs for extension resources
+      const markedUrl = chrome.runtime.getURL('libs/marked.min.js');
+      const katexJsUrl = chrome.runtime.getURL('libs/katex.min.js');
+      const katexCssUrl = chrome.runtime.getURL('libs/katex.min.css');
+
+      // Helper function to load scripts
+      const loadScript = (url) => {
+        return new Promise((resolveScript, rejectScript) => {
+          const script = document.createElement('script');
+          script.src = url;
+          script.onload = resolveScript;
+          script.onerror = rejectScript;
+          document.head.appendChild(script);
+        });
+      };
+
+      // Load CSS
+      const loadCSS = (url) => {
+        return new Promise((resolveCSS) => {
+          const link = document.createElement('link');
+          link.rel = 'stylesheet';
+          link.href = url;
+          link.onload = resolveCSS;
+          document.head.appendChild(link);
+        });
+      };
+
+      // Load all resources in parallel
+      Promise.all([
+        loadScript(markedUrl).then(() => {
+          this.librariesLoaded.marked = true;
+          // Configure marked options
+          marked.setOptions({
+            breaks: true,
+            gfm: true,
+            headerIds: true,
+            sanitize: false
+          });
+        }),
+        loadScript(katexJsUrl).then(() => {
+          this.librariesLoaded.katex = true;
+        }),
+        loadCSS(katexCssUrl)
+      ])
+      .then(resolve)
+      .catch(reject);
+    });
+  },
+
+  /**
+   * Format markdown text to HTML with LaTeX support
+   * @param {string} text - Markdown text
+   * @returns {Promise<string>} - Promise resolving to HTML formatted text
+   */
+  formatMarkdown: async function(text) {
     if (!text) return '';
     
-    // First ensure all system messages are removed
+    // Clean system messages first
     const cleanedText = this.cleanSystemMessages(text);
     
-    // Sanitize the input to prevent XSS
-    const sanitized = cleanedText
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;');
-    
-    // Process mathematics notation with enhanced symbol support
-    let formatted = sanitized;
-    
-    // Handle display math notation \[ ... \]
-    formatted = formatted.replace(/\\\[([\s\S]*?)\\\]/g, '<div class="math-display">$1</div>');
-    
-    // Handle inline math notation \( ... \)
-    formatted = formatted.replace(/\\\(([\s\S]*?)\\\)/g, '<span class="math-inline">$1</span>');
-    
-    // Enhanced LaTeX math symbols
-    const mathSymbols = [
-      // Basic operators
-      { pattern: /\\cap/g, replacement: '∩' },             // Intersection
-      { pattern: /\\cup/g, replacement: '∪' },             // Union
-      { pattern: /\\in/g, replacement: '∈' },              // Element of
-      { pattern: /\\subset/g, replacement: '⊂' },          // Subset
-      { pattern: /\\supset/g, replacement: '⊃' },          // Superset
-      { pattern: /\\emptyset/g, replacement: '∅' },        // Empty set
+    try {
+      // Load libraries if needed
+      await this.loadLibraries();
       
-      // Arithmetic operators
-      { pattern: /\\times/g, replacement: '×' },           // Multiplication
-      { pattern: /\\div/g, replacement: '÷' },             // Division
-      { pattern: /\\pm/g, replacement: '±' },              // Plus-minus
-      { pattern: /\\cdot/g, replacement: '·' },            // Dot product
+      // Pre-process: Extract and save code blocks to prevent interference with math
+      const codeBlocks = [];
+      const processedText = cleanedText.replace(/```[\s\S]*?```|`[\s\S]*?`/g, (match) => {
+        const id = `__CODE_BLOCK_${codeBlocks.length}__`;
+        codeBlocks.push(match);
+        return id;
+      });
       
-      // Comparison operators
-      { pattern: /\\leq/g, replacement: '≤' },             // Less than or equal
-      { pattern: /\\geq/g, replacement: '≥' },             // Greater than or equal
-      { pattern: /\\neq/g, replacement: '≠' },             // Not equal
-      { pattern: /\\approx/g, replacement: '≈' },          // Approximately
+      // Process LaTeX expressions
+      let mathProcessed = this.renderMathExpressions(processedText);
       
-      // Arrows and implications
-      { pattern: /\\rightarrow/g, replacement: '→' },      // Right arrow
-      { pattern: /\\leftarrow/g, replacement: '←' },       // Left arrow
-      { pattern: /\\Rightarrow/g, replacement: '⇒' },      // Right double arrow
-      { pattern: /\\Leftarrow/g, replacement: '⇐' },       // Left double arrow
-      { pattern: /\\implies/g, replacement: '⟹' },        // Implies
-      { pattern: /\\iff/g, replacement: '⟺' },            // If and only if
+      // Restore code blocks
+      codeBlocks.forEach((block, index) => {
+        mathProcessed = mathProcessed.replace(`__CODE_BLOCK_${index}__`, block);
+      });
       
-      // Other symbols
-      { pattern: /\\ldots/g, replacement: '…' },           // Horizontal ellipsis
-      { pattern: /\\infty/g, replacement: '∞' },           // Infinity
-      { pattern: /\\,/g, replacement: ' ' },               // Thin space
+      // Process Markdown using marked
+      const htmlContent = marked.parse(mathProcessed);
       
-      // Greek letters (lowercase)
-      { pattern: /\\alpha/g, replacement: 'α' },
-      { pattern: /\\beta/g, replacement: 'β' },
-      { pattern: /\\gamma/g, replacement: 'γ' },
-      { pattern: /\\delta/g, replacement: 'δ' },
-      { pattern: /\\epsilon/g, replacement: 'ε' },
-      { pattern: /\\zeta/g, replacement: 'ζ' },
-      { pattern: /\\eta/g, replacement: 'η' },
-      { pattern: /\\theta/g, replacement: 'θ' },
-      { pattern: /\\iota/g, replacement: 'ι' },
-      { pattern: /\\kappa/g, replacement: 'κ' },
-      { pattern: /\\lambda/g, replacement: 'λ' },
-      { pattern: /\\mu/g, replacement: 'μ' },
-      { pattern: /\\nu/g, replacement: 'ν' },
-      { pattern: /\\xi/g, replacement: 'ξ' },
-      { pattern: /\\pi/g, replacement: 'π' },
-      { pattern: /\\rho/g, replacement: 'ρ' },
-      { pattern: /\\sigma/g, replacement: 'σ' },
-      { pattern: /\\tau/g, replacement: 'τ' },
-      { pattern: /\\upsilon/g, replacement: 'υ' },
-      { pattern: /\\phi/g, replacement: 'φ' },
-      { pattern: /\\chi/g, replacement: 'χ' },
-      { pattern: /\\psi/g, replacement: 'ψ' },
-      { pattern: /\\omega/g, replacement: 'ω' },
-      
-      // Greek letters (uppercase)
-      { pattern: /\\Gamma/g, replacement: 'Γ' },
-      { pattern: /\\Delta/g, replacement: 'Δ' },
-      { pattern: /\\Theta/g, replacement: 'Θ' },
-      { pattern: /\\Lambda/g, replacement: 'Λ' },
-      { pattern: /\\Xi/g, replacement: 'Ξ' },
-      { pattern: /\\Pi/g, replacement: 'Π' },
-      { pattern: /\\Sigma/g, replacement: 'Σ' },
-      { pattern: /\\Phi/g, replacement: 'Φ' },
-      { pattern: /\\Psi/g, replacement: 'Ψ' },
-      { pattern: /\\Omega/g, replacement: 'Ω' }
-    ];
-    
-    // Apply all symbol replacements
-    mathSymbols.forEach(symbol => {
-      formatted = formatted.replace(symbol.pattern, symbol.replacement);
-    });
-    
-    // Remove any remaining \mi commands
-    formatted = formatted.replace(/\\mi/g, '');
-    
-    // Function notation n(A) for cardinality
-    formatted = formatted.replace(/n\((.*?)\)/g, '|$1|');
-    
-    // Make superscripts look better (e.g., x^2)
-    formatted = formatted.replace(/\^(\d+|\{.*?\})/g, '<sup>$1</sup>');
-    
-    // Make subscripts look better (e.g., x_i)
-    formatted = formatted.replace(/\_(\d+|\{.*?\})/g, '<sub>$1</sub>');
-    
-    // Apply standard markdown formatting
-    formatted = formatted
-      // Handle code blocks (```code```)
-      .replace(/```([\s\S]*?)```/g, '<pre><code>$1</code></pre>')
-      
-      // Handle inline code (`code`)
-      .replace(/`([^`]+)`/g, '<code>$1</code>')
-      
-      // Handle bold (**text** or __text__)
-      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-      .replace(/__(.*?)__/g, '<strong>$1</strong>')
-      
-      // Handle italic (*text* or _text_) - being careful not to conflict with bold
-      .replace(/\b_([^_]+)_\b/g, '<em>$1</em>')
-      .replace(/\b\*([^\*]+)\*\b/g, '<em>$1</em>')
-      
-      // Handle links [text](url)
-      .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>')
-      
-      // Handle headings (# Heading)
-      .replace(/^# (.*$)/gm, '<h1>$1</h1>')
-      .replace(/^## (.*$)/gm, '<h2>$1</h2>')
-      .replace(/^### (.*$)/gm, '<h3>$1</h3>')
-      
-      // Handle blockquotes
-      .replace(/^> (.*$)/gm, '<blockquote>$1</blockquote>')
-      
-      // Handle unordered lists
-      .replace(/^\* (.*$)/gm, '<li>$1</li>')
-      .replace(/^- (.*$)/gm, '<li>$1</li>')
-      
-      // Handle ordered lists
-      .replace(/^\d+\. (.*$)/gm, '<li>$1</li>')
-      
-      // Handle paragraphs
-      .replace(/\n\n/g, '</p><p>')
-      
-      // Handle line breaks
-      .replace(/\n/g, '<br>');
-    
-    // Wrap with paragraph if not already wrapped
-    if (!formatted.startsWith('<h') && !formatted.startsWith('<pre') && !formatted.startsWith('<blockquote')) {
-      formatted = '<p>' + formatted + '</p>';
+      return htmlContent;
+    } catch (error) {
+      console.error('Error formatting markdown:', error);
+      // Fallback to basic rendering if libraries fail to load
+      return `<p>${cleanedText}</p>`;
     }
-    
-    // Clean up any empty paragraphs
-    formatted = formatted.replace(/<p><\/p>/g, '');
-    
-    // Wrap lists with <ul> or <ol> tags as needed
-    formatted = formatted.replace(/<li>.*?<\/li>/g, function(match) {
-      return '<ul>' + match + '</ul>';
-    });
-    
-    return formatted;
   },
   
+  /**
+   * Render LaTeX expressions using KaTeX
+   * @param {string} text - Text with LaTeX expressions
+   * @returns {string} - Text with rendered LaTeX
+   */
+  renderMathExpressions: function(text) {
+    if (!window.katex) {
+      console.error('KaTeX library not loaded');
+      return text;
+    }
+    
+    let processed = text;
+    
+    // Process display math: $$ ... $$ or \[ ... \]
+    processed = processed.replace(/\$\$([\s\S]*?)\$\$|\\\[([\s\S]*?)\\\]/g, (match, g1, g2) => {
+      const formula = g1 || g2;
+      try {
+        return katex.renderToString(formula, { displayMode: true });
+      } catch (e) {
+        console.error('Error rendering display math:', e);
+        return `<div class="math-display-error">\$\$${formula}\$\$</div>`;
+      }
+    });
+    
+    // Process inline math: $ ... $ or \( ... \)
+    processed = processed.replace(/\$([^\$\n]+?)\$|\\\(([\s\S]*?)\\\)/g, (match, g1, g2) => {
+      const formula = g1 || g2;
+      
+      // Skip currency symbols like $50
+      if (/^\s*\d+/.test(formula)) return match; 
+      
+      try {
+        return katex.renderToString(formula, { displayMode: false });
+      } catch (e) {
+        console.error('Error rendering inline math:', e);
+        return `<span class="math-inline-error">\$${formula}\$</span>`;
+      }
+    });
+    
+    return processed;
+  },
+
   /**
    * Clean system messages from text
    * @param {string} text - Text to clean
@@ -306,16 +286,17 @@ const FormatUtils = {
       cleaned = cleaned.replace(pattern, '');
     });
     
-    // Remove any LaTeX math tags that don't contain actual math
-    cleaned = cleaned.replace(/\\mi(?!\w)/g, '');  // Remove standalone \mi
-    cleaned = cleaned.replace(/\\boxed\{([^}]*)\}/g, '$1');  // Remove \boxed and keep content
-    
     // Trim whitespace
     cleaned = cleaned.trim();
     
     return cleaned;
   }
 };
+
+// Export the FormatUtils module if needed
+if (typeof module !== 'undefined') {
+  module.exports = FormatUtils;
+}
 
 // ==========================================
 // UI MODULE - User interface management
@@ -1459,7 +1440,9 @@ const AIManager = {
     
     const { aiResponseDiv } = UIManager.elements;
     if (aiResponseDiv) {
-      aiResponseDiv.innerHTML = FormatUtils.formatMarkdown(cleanedResponse);
+      FormatUtils.formatMarkdown(cleanedResponse).then(formattedHtml => {
+        aiResponseDiv.innerHTML = formattedHtml;
+      });
       
       // Add styling to code blocks
       aiResponseDiv.querySelectorAll('pre code').forEach(block => {
@@ -3111,7 +3094,9 @@ function loadSettings() {
     // Handle AI response if it exists
     const { aiResponseDiv, aiResponseContainer } = UIManager.elements;
     if (result.aiResponse && aiResponseDiv) {
-      aiResponseDiv.innerHTML = FormatUtils.formatMarkdown(result.aiResponse);
+      FormatUtils.formatMarkdown(result.aiResponse).then(formattedHtml => {
+        aiResponseDiv.innerHTML = formattedHtml;
+      });
       UIManager.showElement(aiResponseContainer, true);
       
       // Add styling to code blocks
