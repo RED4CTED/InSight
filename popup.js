@@ -358,7 +358,6 @@ const UIManager = {
     this.elements.apiKeyContainer = document.getElementById('apiKeyContainer');
     this.elements.apiKeyInput = document.getElementById('apiKeyInput');
     this.elements.saveApiKeyBtn = document.getElementById('saveApiKeyBtn');
-    this.elements.localServerContainer = document.getElementById('localServerContainer');
     this.elements.serverUrlInput = document.getElementById('serverUrlInput');
     this.elements.saveServerUrlBtn = document.getElementById('saveServerUrlBtn');
     this.elements.customOcrContainer = document.getElementById('customOcrContainer');
@@ -377,10 +376,9 @@ const UIManager = {
     this.elements.openaiApiKeyInput = document.getElementById('openaiApiKeyInput');
     this.elements.openaiModelSelect = document.getElementById('openaiModelSelect');
     this.elements.saveOpenaiApiKeyBtn = document.getElementById('saveOpenaiApiKeyBtn');
-    this.elements.localAiServerContainer = document.getElementById('localAiServerContainer');
-    this.elements.aiServerUrlInput = document.getElementById('aiServerUrlInput');
-    this.elements.localAiModelInput = document.getElementById('localAiModelInput');
-    this.elements.saveAiServerUrlBtn = document.getElementById('saveAiServerUrlBtn');
+    
+    
+    
     this.elements.customAiContainer = document.getElementById('customAiContainer');
     this.elements.customAiUrlInput = document.getElementById('customAiUrlInput');
     this.elements.customAiHeaderKeyInput = document.getElementById('customAiHeaderKeyInput');
@@ -583,8 +581,7 @@ const UIManager = {
    * @param {string} service - The selected OCR service ('local', 'ocrspace', or 'custom')
    */
   updateOcrUi: function(service) {
-    const { localServerContainer, apiKeyContainer, customOcrContainer } = this.elements;
-    this.showElement(localServerContainer, service === 'local');
+    const { apiKeyContainer, customOcrContainer } = this.elements;
     this.showElement(apiKeyContainer, service === 'ocrspace');
     this.showElement(customOcrContainer, service === 'custom');
   },
@@ -594,9 +591,8 @@ const UIManager = {
    * @param {string} service - The selected AI service ('openai', 'local', or 'custom')
    */
   updateAiUi: function(service) {
-    const { openaiContainer, localAiServerContainer, customAiContainer } = this.elements;
+    const { openaiContainer, customAiContainer } = this.elements;
     this.showElement(openaiContainer, service === 'openai');
-    this.showElement(localAiServerContainer, service === 'local');
     this.showElement(customAiContainer, service === 'custom');
   },
   
@@ -1041,35 +1037,6 @@ const OCRManager = {
   },
   
   /**
-   * Extract text using local server
-   * @param {string} imageData - Image data URL
-   * @param {string} serverUrl - Local server URL
-   * @returns {Promise<string>} - Promise resolving to extracted text
-   */
-  extractTextWithLocalServer: function(imageData, serverUrl) {
-    console.log('Using local server at:', serverUrl);
-    
-    return fetch(serverUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        image: imageData
-      })
-    })
-    .then(response => {
-      if (!response.ok) {
-        throw new Error('Server returned status ' + response.status);
-      }
-      return response.json();
-    })
-    .then(data => {
-      return data.extracted_text || "No text detected";
-    });
-  },
-  
-  /**
    * Extract text using OCR.space API
    * @param {string} imageData - Image data URL
    * @param {string} apiKey - OCR.space API key
@@ -1326,63 +1293,6 @@ const AIManager = {
   },
   
   /**
-   * Send text and image to local AI server
-   * @param {string} text - Text prompt
-   * @param {string} imageDataUrl - Image data URL
-   * @param {string} serverUrl - Local server URL
-   * @param {string} model - Model name
-   * @returns {Promise<string>} - Promise resolving to AI response
-   */
-  sendToLocalAiWithImage: function(text, imageDataUrl, serverUrl, model) {
-    console.log('Using local AI server at:', serverUrl);
-    
-    // Prepare request body
-    const requestBody = {
-      text: text
-    };
-    
-    // Add image if provided
-    if (imageDataUrl) {
-      // Extract the base64 data
-      const base64Data = imageDataUrl.split(',')[1];
-      requestBody.image = base64Data;
-    }
-    
-    // Add model if specified
-    if (model) {
-      requestBody.model = model;
-    }
-    
-    return fetch(serverUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(requestBody)
-    })
-    .then(response => {
-      if (!response.ok) {
-        throw new Error('Local AI server returned status ' + response.status);
-      }
-      return response.json();
-    })
-    .then(data => {
-      console.log('Local AI server response:', data);
-      
-      // Check for the response field (expecting 'response' or 'text' field)
-      if (data.response) {
-        return data.response;
-      } else if (data.text) {
-        return data.text;
-      } else if (data.content) {
-        return data.content;
-      } else {
-        throw new Error('Unexpected response format from local AI server');
-      }
-    });
-  },
-  
-  /**
    * Send text and image to custom AI API
    * @param {string} text - Text prompt
    * @param {string} imageDataUrl - Image data URL
@@ -1570,20 +1480,6 @@ const AIManager = {
           return this.sendToBackground(aiService, promptText, {
             apiKey: openaiSettings.apiKey,
             model: openaiSettings.model || 'gpt-4o-mini-2024-07-18'
-          });
-        });
-      } 
-      else if (aiService === 'local') {
-        return StorageManager.get(['localAiSettings']).then(result => {
-          const localAiSettings = result.localAiSettings || {};
-          if (!localAiSettings.url) {
-            throw new Error('Local AI server URL is not set');
-          }
-          
-          // Send request to background script
-          return this.sendToBackground(aiService, promptText, {
-            serverUrl: localAiSettings.url,
-            model: localAiSettings.model || ''
           });
         });
       } 
@@ -2021,17 +1917,6 @@ const EventHandlers = {
       console.error('saveApiKeyBtn element not found');
     }
     
-    // Local server URL save button handler
-    if (saveServerUrlBtn) {
-      console.log('Adding click listener to saveServerUrlBtn');
-      saveServerUrlBtn.addEventListener('click', function(event) {
-        console.log('Save server URL button clicked');
-        EventHandlers.handleSaveServerUrlClick.call(this, event);
-      });
-    } else {
-      console.error('saveServerUrlBtn element not found');
-    }
-    
     // Custom OCR headers add button handler
     if (addOcrHeaderBtn) {
       console.log('Adding click listener to addOcrHeaderBtn');
@@ -2087,17 +1972,6 @@ const EventHandlers = {
       });
     } else {
       console.error('saveOpenaiApiKeyBtn element not found');
-    }
-    
-    // Local AI server settings save button handler
-    if (saveAiServerUrlBtn) {
-      console.log('Adding click listener to saveAiServerUrlBtn');
-      saveAiServerUrlBtn.addEventListener('click', function(event) {
-        console.log('Save AI server URL button clicked');
-        EventHandlers.handleSaveAiServerUrlClick.call(this, event);
-      });
-    } else {
-      console.error('saveAiServerUrlBtn element not found');
     }
     
     // Custom AI headers add button handler
@@ -2914,39 +2788,6 @@ handleClearClick: function() {
   },
   
   /**
-   * Handle save AI server URL button click
-   */
-  handleSaveAiServerUrlClick: function() {
-    const { aiServerUrlInput, localAiModelInput } = UIManager.elements;
-    const url = aiServerUrlInput ? aiServerUrlInput.value.trim() : '';
-    const model = localAiModelInput ? localAiModelInput.value.trim() : '';
-    
-    // Basic URL validation
-    if (!url) {
-      UIManager.updateStatus('Please enter a valid server URL', 'error');
-      return;
-    }
-    
-    // Check if URL has protocol
-    if (!url.startsWith('http://') && !url.startsWith('https://')) {
-      UIManager.updateStatus('URL must start with http:// or https://', 'error');
-      return;
-    }
-    
-    // Save local AI settings
-    const localAiSettings = {
-      url,
-      model
-    };
-    
-    StorageManager.set({localAiSettings}).then(function() {
-      UIManager.updateStatus('Local AI server settings saved!', 'success');
-    }).catch(error => {
-      UIManager.updateStatus('Error saving local AI settings: ' + error.message, 'error');
-    });
-  },
-  
-  /**
    * Handle add AI header button click
    */
   handleAddAiHeaderClick: function() {
@@ -3224,11 +3065,9 @@ function loadSettings() {
   StorageManager.get([
     'ocrService', 
     'ocrspaceApiKey', 
-    'serverUrl',
     'customOcrSettings',
     'aiService',
     'openaiSettings',
-    'localAiSettings',
     'customAiSettings'
   ]).then(function(result) {
     // Set default OCR service if not saved
@@ -3294,14 +3133,6 @@ function loadSettings() {
           UIManager.elements.openaiModelSelect.value = openai.model;
         }
       }
-    }
-    
-    // Load local AI settings if saved
-    if (result.localAiSettings && UIManager.elements.aiServerUrlInput) {
-      const localAi = result.localAiSettings;
-      
-      UIManager.elements.aiServerUrlInput.value = localAi.url || '';
-      UIManager.elements.localAiModelInput.value = localAi.model || '';
     }
     
     // Load custom AI settings if saved

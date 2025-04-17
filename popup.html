@@ -253,10 +253,6 @@
           <h2>OCR Service</h2>
           <div class="radio-group">
             <label class="radio-option">
-              <input type="radio" name="ocrService" value="local" checked> 
-              Local Server
-            </label>
-            <label class="radio-option">
               <input type="radio" name="ocrService" value="ocrspace"> 
               OCR.space API
             </label>
@@ -264,16 +260,6 @@
               <input type="radio" name="ocrService" value="custom"> 
               Custom API
             </label>
-          </div>
-          
-          <!-- Local server settings -->
-          <div id="localServerContainer">
-            <h3>Local Server Settings</h3>
-            <p class="info-text">Include the full URL with protocol (http:// or https://)</p>
-            <div class="input-group">
-              <input type="text" id="serverUrlInput" placeholder="Enter local server URL (e.g., http://localhost:8000)">
-              <button id="saveServerUrlBtn" class="action-button secondary small">Save</button>
-            </div>
           </div>
           
           <!-- OCR.space API settings -->
@@ -334,10 +320,6 @@
               OpenAI API
             </label>
             <label class="radio-option">
-              <input type="radio" name="aiService" value="local"> 
-              Local Server
-            </label>
-            <label class="radio-option">
               <input type="radio" name="aiService" value="custom"> 
               Custom API
             </label>
@@ -360,22 +342,6 @@
             </div>
             <div class="button-row">
               <button id="saveOpenaiApiKeyBtn" class="action-button secondary">Save OpenAI Settings</button>
-            </div>
-          </div>
-          
-          <!-- Local AI server settings -->
-          <div id="localAiServerContainer" class="hidden">
-            <h3>Local AI Server Settings</h3>
-            <p class="info-text">Include the full URL with protocol (http:// or https://)</p>
-            <div class="input-group">
-              <input type="text" id="aiServerUrlInput" placeholder="Enter local AI server URL">
-            </div>
-            <h4>Model</h4>
-            <div class="input-group">
-              <input type="text" id="localAiModelInput" placeholder="Model name (if required)">
-            </div>
-            <div class="button-row">
-              <button id="saveAiServerUrlBtn" class="action-button secondary">Save Local AI Settings</button>
             </div>
           </div>
           

@@ -44,28 +44,6 @@ function removeRequest(requestId) {
 }
 
 // OCR Methods
-function extractTextWithLocalServer(imageData, serverUrl) {
-  console.log('[Background] Using local server at:', serverUrl);
-  
-  return fetch(serverUrl, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      image: imageData
-    })
-  })
-  .then(response => {
-    if (!response.ok) {
-      throw new Error('Server returned status ' + response.status);
-    }
-    return response.json();
-  })
-  .then(data => {
-    return data.extracted_text || "No text detected";
-  });
-}
 
 function extractTextWithOCRSpace(imageData, apiKey) {
   console.log('[Background] Using OCR.space API');
@@ -299,55 +277,6 @@ function sendToOpenAIWithImage(text, imageData, apiKey, model) {
   });
 }
 
-function sendToLocalAiWithImage(text, imageData, serverUrl, model) {
-  console.log('[Background] Using local AI server at:', serverUrl);
-  
-  // Prepare request body
-  const requestBody = {
-    text: text
-  };
-  
-  // Add image if provided
-  if (imageData) {
-    // Extract the base64 data
-    const base64Data = imageData.split(',')[1];
-    requestBody.image = base64Data;
-  }
-  
-  // Add model if specified
-  if (model) {
-    requestBody.model = model;
-  }
-  
-  return fetch(serverUrl, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify(requestBody)
-  })
-  .then(response => {
-    if (!response.ok) {
-      throw new Error('Local AI server returned status ' + response.status);
-    }
-    return response.json();
-  })
-  .then(data => {
-    console.log('[Background] Local AI server response received');
-    
-    // Check for the response field (expecting 'response' or 'text' field)
-    if (data.response) {
-      return data.response;
-    } else if (data.text) {
-      return data.text;
-    } else if (data.content) {
-      return data.content;
-    } else {
-      throw new Error('Unexpected response format from local AI server');
-    }
-  });
-}
-
 function sendToCustomAiWithImage(text, imageData, settings) {
   console.log('[Background] Using custom AI API at:', settings.url);
   
@@ -497,8 +426,6 @@ function processOCRRequest(requestId) {
       
       if (service === 'ocrspace') {
         processPromise = extractTextWithOCRSpace(imageData, params.apiKey);
-      } else if (service === 'local') {
-        processPromise = extractTextWithLocalServer(imageData, params.serverUrl);
       } else if (service === 'custom') {
         processPromise = extractTextWithCustomApi(imageData, params.settings);
       } else {
@@ -617,8 +544,6 @@ function processAIRequest(requestId) {
       
       if (service === 'openai') {
         processPromise = sendToOpenAIWithImage(text, imageData, params.apiKey, params.model);
-      } else if (service === 'local') {
-        processPromise = sendToLocalAiWithImage(text, imageData, params.serverUrl, params.model);
       } else if (service === 'custom') {
         processPromise = sendToCustomAiWithImage(text, imageData, params.settings);
       } else {
