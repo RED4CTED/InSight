@@ -358,8 +358,6 @@ const UIManager = {
     this.elements.apiKeyContainer = document.getElementById('apiKeyContainer');
     this.elements.apiKeyInput = document.getElementById('apiKeyInput');
     this.elements.saveApiKeyBtn = document.getElementById('saveApiKeyBtn');
-    this.elements.serverUrlInput = document.getElementById('serverUrlInput');
-    this.elements.saveServerUrlBtn = document.getElementById('saveServerUrlBtn');
     this.elements.customOcrContainer = document.getElementById('customOcrContainer');
     this.elements.customOcrUrlInput = document.getElementById('customOcrUrlInput');
     this.elements.customOcrHeaderKeyInput = document.getElementById('customOcrHeaderKeyInput');
@@ -578,7 +576,7 @@ const UIManager = {
   
   /**
    * Update OCR UI based on selected service
-   * @param {string} service - The selected OCR service ('local', 'ocrspace', or 'custom')
+   * @param {string} service - The selected OCR service ('ocrspace', or 'custom')
    */
   updateOcrUi: function(service) {
     const { apiKeyContainer, customOcrContainer } = this.elements;
@@ -588,7 +586,7 @@ const UIManager = {
   
   /**
    * Update AI UI based on selected service
-   * @param {string} service - The selected AI service ('openai', 'local', or 'custom')
+   * @param {string} service - The selected AI service ('openai' or 'custom')
    */
   updateAiUi: function(service) {
     const { openaiContainer, customAiContainer } = this.elements;
@@ -923,9 +921,9 @@ const OCRManager = {
     if (resultTextarea) resultTextarea.value = 'Processing...';
     if (aiResponseDiv) aiResponseDiv.innerHTML = '';
     
-    StorageManager.get(['ocrService', 'ocrspaceApiKey', 'serverUrl', 'customOcrSettings'])
+    StorageManager.get(['ocrService', 'ocrspaceApiKey', 'customOcrSettings'])
       .then(result => {
-        const ocrService = result.ocrService || 'local';
+        const ocrService = result.ocrService || 'customOcrSettings';
         
         // Prepare request data
         const requestData = {
@@ -937,8 +935,6 @@ const OCRManager = {
         // Add service-specific parameters
         if (ocrService === 'ocrspace') {
           requestData.apiKey = result.ocrspaceApiKey;
-        } else if (ocrService === 'local') {
-          requestData.serverUrl = result.serverUrl || 'http://localhost:8000';
         } else if (ocrService === 'custom') {
           requestData.settings = result.customOcrSettings;
         }
@@ -1860,9 +1856,9 @@ const EventHandlers = {
     console.log('Initializing Settings tab handlers');
     const { 
       saveInterfaceModeBtn, ocrServiceRadios, saveApiKeyBtn,
-      saveServerUrlBtn, addOcrHeaderBtn, saveCustomOcrBtn,
+      addOcrHeaderBtn, saveCustomOcrBtn,
       testCustomOcrBtn, aiServiceRadios, saveOpenaiApiKeyBtn,
-      saveAiServerUrlBtn, addAiHeaderBtn, saveCustomAiBtn,
+      addAiHeaderBtn, saveCustomAiBtn,
       testCustomAiBtn
     } = UIManager.elements;
     
@@ -1870,13 +1866,11 @@ const EventHandlers = {
       saveInterfaceModeBtn: !!saveInterfaceModeBtn,
       ocrServiceRadios: !!(ocrServiceRadios && ocrServiceRadios.length),
       saveApiKeyBtn: !!saveApiKeyBtn,
-      saveServerUrlBtn: !!saveServerUrlBtn,
       addOcrHeaderBtn: !!addOcrHeaderBtn,
       saveCustomOcrBtn: !!saveCustomOcrBtn,
       testCustomOcrBtn: !!testCustomOcrBtn,
       aiServiceRadios: !!(aiServiceRadios && aiServiceRadios.length),
       saveOpenaiApiKeyBtn: !!saveOpenaiApiKeyBtn,
-      saveAiServerUrlBtn: !!saveAiServerUrlBtn,
       addAiHeaderBtn: !!addAiHeaderBtn,
       saveCustomAiBtn: !!saveCustomAiBtn,
       testCustomAiBtn: !!testCustomAiBtn
@@ -2589,33 +2583,6 @@ handleClearClick: function() {
   },
   
   /**
-   * Handle save server URL button click
-   */
-  handleSaveServerUrlClick: function() {
-    const { serverUrlInput } = UIManager.elements;
-    const serverUrl = serverUrlInput ? serverUrlInput.value.trim() : '';
-    
-    // Basic URL validation
-    if (!serverUrl) {
-      UIManager.updateStatus('Please enter a valid server URL', 'error');
-      return;
-    }
-    
-    // Check if URL has protocol
-    if (!serverUrl.startsWith('http://') && !serverUrl.startsWith('https://')) {
-      UIManager.updateStatus('URL must start with http:// or https://', 'error');
-      return;
-    }
-    
-    // Save server URL to storage
-    StorageManager.set({serverUrl: serverUrl}).then(function() {
-      UIManager.updateStatus('Server URL saved!', 'success');
-    }).catch(error => {
-      UIManager.updateStatus('Error saving server URL: ' + error.message, 'error');
-    });
-  },
-  
-  /**
    * Handle add OCR header button click
    */
   handleAddOcrHeaderClick: function() {
@@ -3071,7 +3038,7 @@ function loadSettings() {
     'customAiSettings'
   ]).then(function(result) {
     // Set default OCR service if not saved
-    const ocrService = result.ocrService || 'local';
+    const ocrService = result.ocrService || 'customOcrSettings';
     
     // Set the OCR radio button if it exists
     const ocrRadioToCheck = document.querySelector(`input[name="ocrService"][value="${ocrService}"]`);
@@ -3097,11 +3064,6 @@ function loadSettings() {
     // Set OCR.space API key if saved
     if (result.ocrspaceApiKey && UIManager.elements.apiKeyInput) {
       UIManager.elements.apiKeyInput.value = result.ocrspaceApiKey;
-    }
-    
-    // Set server URL or default to localhost if not set
-    if (UIManager.elements.serverUrlInput) {
-      UIManager.elements.serverUrlInput.value = result.serverUrl || 'http://localhost:8000';
     }
     
     // Load custom OCR settings if saved
