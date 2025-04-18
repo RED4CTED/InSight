@@ -3005,7 +3005,7 @@ function loadSettings() {
   
   // Load interface mode
   StorageManager.get(['interfaceMode']).then(function(result) {
-    const interfaceMode = result.interfaceMode || 'panel'; // Default to panel mode
+    const interfaceMode = result.interfaceMode || 'popup'; // Default to popup mode
     
     // Set the radio button
     const interfaceModeRadio = document.querySelector(`input[name="interfaceMode"][value="${interfaceMode}"]`);

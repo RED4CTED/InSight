@@ -687,7 +687,7 @@ actionAPI.onClicked.addListener(function(tab) {
   
   // Get the current mode from storage
   browserAPI.storage.local.get(['interfaceMode'], function(result) {
-    const mode = result.interfaceMode || 'panel'; // Default to panel
+    const mode = result.interfaceMode || 'popup'; // Default to popup
     console.log('[Background] Interface mode from storage:', mode);
     
     // Force close any existing panel
