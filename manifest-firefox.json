@@ -1,8 +1,8 @@
 {
   "manifest_version": 2,
   "name": "InSight",
-  "version": "0.0.19",
-  "description": "Extract text from screenshots and send to AI",
+  "version": "0.0.20",
+  "description": "InSight turns any page into a smart workspace. Snap a screenshot or upload an image, send it to your OCR API, then tap into any AI model for summaries, translations, sentiment analysis and more—all from one fully customizable extension.",
   "permissions": [
     "activeTab",
     "scripting",
