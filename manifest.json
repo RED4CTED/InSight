@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "InSight",
-  "version": "1.0",
+  "version": "0.0.18",
   "description": "Extract text from screenshots and send to AI",
   "permissions": [
     "activeTab",
