@@ -55,7 +55,7 @@ function injectInsightPanel() {
     
     // Add title
     const title = document.createElement('h1');
-    title.textContent = 'InSight Text Extractor';
+    title.textContent = 'InSight';
     title.style.cssText = `
       margin: 0;
       font-size: 16px;
