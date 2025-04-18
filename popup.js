@@ -1502,7 +1502,6 @@ const AIManager = {
     });
   },
   
-  // Add this helper method to AIManager
   sendToBackground: function(service, text, params) {
     // Prepare request data
     const requestData = {
@@ -1576,16 +1575,16 @@ const AIManager = {
     });
   },
 
-  // In AIManager - Add these new functions
-setLoadingState: function(isLoading) {
-  // Update UI
-  if (UIManager.elements.aiLoading) {
-    if (isLoading) {
-      UIManager.elements.aiLoading.classList.remove('hidden');
-    } else {
-      UIManager.elements.aiLoading.classList.add('hidden');
+
+  setLoadingState: function(isLoading) {
+    // Update UI
+    if (UIManager.elements.aiLoading) {
+      if (isLoading) {
+        UIManager.elements.aiLoading.classList.remove('hidden');
+      } else {
+        UIManager.elements.aiLoading.classList.add('hidden');
+      }
     }
-  }
   
   // Update storage flag
   StorageManager.set({aiLoadingActive: isLoading}).catch(error => {
