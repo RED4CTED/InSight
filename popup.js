@@ -2878,7 +2878,6 @@ handleClearClick: function() {
 };
 
 // Function to check for pending screenshots and process them
-// In popup.js - Update the checkPendingScreenshot function
 function checkPendingScreenshot() {
   StorageManager.get(['pendingScreenshot', 'capturingForAi', 'lastCaptureMode', 'screenshotIntent']).then(function(result) {
     if (result.pendingScreenshot) {
