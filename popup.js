@@ -331,14 +331,15 @@ const UIManager = {
     this.elements.clearBtn = document.getElementById('clearBtn');
     this.elements.resultTextarea = document.getElementById('result');
     this.elements.previewContainer = document.getElementById('preview-container');
-    this.elements.uploadImageBtn = document.getElementById('uploadImageBtn');
+    this.elements.uploadFileBtn = document.getElementById('uploadFileBtn'); // Updated ID
     this.elements.imageFileInput = document.getElementById('imageFileInput');
     this.elements.sendToAiTabBtn = document.getElementById('sendToAiTabBtn');
+    this.elements.downloadPdfBtn = document.getElementById('downloadPdfBtn'); // New button
     
     // AI tab elements
     this.elements.aiPrompt = document.getElementById('aiPrompt');
     this.elements.appendExtractedTextBtn = document.getElementById('appendExtractedTextBtn');
-    this.elements.uploadAiImageBtn = document.getElementById('uploadAiImageBtn');
+    this.elements.uploadAiFileBtn = document.getElementById('uploadAiFileBtn'); // Updated ID
     this.elements.aiImageFileInput = document.getElementById('aiImageFileInput');
     this.elements.captureAiScreenshotBtn = document.getElementById('captureAiScreenshotBtn');
     this.elements.useOcrImageBtn = document.getElementById('useOcrImageBtn');
@@ -374,7 +375,9 @@ const UIManager = {
     this.elements.openaiApiKeyInput = document.getElementById('openaiApiKeyInput');
     this.elements.openaiModelSelect = document.getElementById('openaiModelSelect');
     this.elements.saveOpenaiApiKeyBtn = document.getElementById('saveOpenaiApiKeyBtn');
-    
+    this.elements.customOcrFileFormatRadios = document.querySelectorAll('input[name="customOcrFileFormat"]');
+    this.elements.customOcrPdfSupportCheckbox = document.getElementById('customOcrPdfSupportCheckbox');
+    this.elements.customOcrResponseTypeRadios = document.querySelectorAll('input[name="customOcrResponseType"]');
     
     
     this.elements.customAiContainer = document.getElementById('customAiContainer');
@@ -963,7 +966,181 @@ const OCRManager = {
         UIManager.updateStatus('Error getting OCR settings: ' + error.message, 'error');
       });
   },
+  processPdfWithSelectedService: function(pdfFile) {
+    UIManager.updateStatus('Sending PDF to OCR service...', '');
+    UIManager.showElement(UIManager.elements.loadingDiv, true);
+    
+    // Clear previous OCR results from storage before starting a new request
+    StorageManager.remove(['extractedText', 'processedPdf']).then(() => {
+      console.log('Previous OCR results cleared');
+    }).catch(error => {
+      console.error('Error clearing previous OCR results:', error);
+    });
+    
+    // Clear UI elements
+    const { resultTextarea, aiResponseDiv, downloadPdfBtn } = UIManager.elements;
+    if (resultTextarea) resultTextarea.value = 'Processing PDF...';
+    if (aiResponseDiv) aiResponseDiv.innerHTML = '';
+    UIManager.showElement(downloadPdfBtn, false);
+    
+    // Convert PDF to base64 first
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      const base64Data = e.target.result; // This will be a data URL
+      
+      StorageManager.get(['ocrService', 'ocrspaceApiKey', 'customOcrSettings'])
+        .then(result => {
+          const ocrService = result.ocrService || 'custom';
+          
+          if (ocrService !== 'custom') {
+            UIManager.showElement(UIManager.elements.loadingDiv, false);
+            UIManager.updateStatus('PDF processing is only supported with custom OCR API', 'error');
+            return;
+          }
+          
+          const settings = result.customOcrSettings;
+          if (!settings || !settings.url) {
+            UIManager.showElement(UIManager.elements.loadingDiv, false);
+            UIManager.updateStatus('Custom OCR settings not configured', 'error');
+            return;
+          }
+          
+          // Ensure PDF support is enabled
+          if (settings.pdfSupport !== true) {
+            UIManager.showElement(UIManager.elements.loadingDiv, false);
+            UIManager.updateStatus('PDF support is not enabled in settings', 'error');
+            return;
+          }
+          
+          // Prepare request data
+          const requestData = {
+            action: 'processPDF',
+            service: 'custom',
+            fileName: pdfFile.name,
+            fileType: pdfFile.type, 
+            fileSize: pdfFile.size,
+            pdfData: base64Data, // Send PDF as base64 data
+            settings: settings
+          };
+          
+          // Send to background script
+          const browserAPI = StorageManager.getBrowserAPI();
+          browserAPI.runtime.sendMessage(requestData)
+            .then(response => {
+              if (response && response.status === 'processing') {
+                UIManager.updateStatus('PDF processing in background. You can close this popup now.', 'success');
+                
+                // Store the request ID
+                StorageManager.set({currentOCRRequestId: response.requestId});
+              } else {
+                UIManager.showElement(UIManager.elements.loadingDiv, false);
+                UIManager.updateStatus('Error: Unexpected response from background', 'error');
+              }
+            })
+            .catch(error => {
+              UIManager.showElement(UIManager.elements.loadingDiv, false);
+              UIManager.updateStatus('Error sending PDF request: ' + error.message, 'error');
+            });
+        })
+        .catch(error => {
+          UIManager.showElement(UIManager.elements.loadingDiv, false);
+          UIManager.updateStatus('Error getting OCR settings: ' + error.message, 'error');
+        });
+    };
+    
+    reader.onerror = function(error) {
+      UIManager.showElement(UIManager.elements.loadingDiv, false);
+      UIManager.updateStatus('Error reading PDF file: ' + error, 'error');
+    };
+    
+    // Read the PDF file as a data URL
+    reader.readAsDataURL(pdfFile);
+  },
   
+  // Add new handler for PDF results
+  handlePdfResult: function(pdfData) {
+    console.log('PDF processed successfully');
+    UIManager.showElement(UIManager.elements.loadingDiv, false);
+    
+    StorageManager.remove(['currentOCRRequestId']).catch(error => {
+      console.error('Error clearing OCR request ID:', error);
+    });
+    
+    const { resultTextarea, copyBtn, clearBtn, downloadPdfBtn, sendToAiTabBtn } = UIManager.elements;
+    
+    // Store the processed PDF data
+    StorageManager.set({processedPdf: pdfData}).catch(error => {
+      console.error('Error saving processed PDF:', error);
+    });
+    
+    // Update UI
+    if (resultTextarea) resultTextarea.value = "PDF processed successfully. You can download the searchable PDF.";
+    if (copyBtn) copyBtn.disabled = true; // Can't copy PDF content
+    if (clearBtn) clearBtn.disabled = false;
+    if (sendToAiTabBtn) sendToAiTabBtn.disabled = true; // Can't send PDF to AI tab yet
+    
+    // Show the download button
+    UIManager.showElement(downloadPdfBtn, true);
+    
+    UIManager.updateStatus('PDF processed successfully!', 'success');
+    
+    // Clear the pending screenshot
+    StorageManager.remove(['pendingScreenshot']).catch(error => {
+      console.error('Error removing pending screenshot:', error);
+    });
+  },
+  
+  // Add handler for the Download PDF button
+  handleDownloadPdfClick: function() {
+    StorageManager.get(['processedPdf']).then(result => {
+      if (result.processedPdf) {
+        // Create a Blob from the PDF data
+        const pdfBlob = OCRManager.base64ToBlob(result.processedPdf, 'application/pdf');
+        
+        // Create a download link
+        const downloadLink = document.createElement('a');
+        downloadLink.href = URL.createObjectURL(pdfBlob);
+        downloadLink.download = 'processed_document.pdf';
+        
+        // Append to the document, trigger click, then remove
+        document.body.appendChild(downloadLink);
+        downloadLink.click();
+        document.body.removeChild(downloadLink);
+        
+        UIManager.updateStatus('PDF download started!', 'success');
+      } else {
+        UIManager.updateStatus('No processed PDF available', 'error');
+      }
+    }).catch(error => {
+      UIManager.updateStatus('Error downloading PDF: ' + error.message, 'error');
+    });
+  },
+  
+  // Helper function to convert base64 to Blob - defined properly as a method of OCRManager
+  base64ToBlob: function(base64Data, contentType) {
+    // Remove data URL prefix if present
+    if (base64Data.startsWith('data:')) {
+      base64Data = base64Data.split(',')[1];
+    }
+    
+    // Convert base64 to binary
+    const byteCharacters = atob(base64Data);
+    const byteArrays = [];
+    
+    for (let offset = 0; offset < byteCharacters.length; offset += 512) {
+      const slice = byteCharacters.slice(offset, offset + 512);
+      
+      const byteNumbers = new Array(slice.length);
+      for (let i = 0; i < slice.length; i++) {
+        byteNumbers[i] = slice.charCodeAt(i);
+      }
+      
+      const byteArray = new Uint8Array(byteNumbers);
+      byteArrays.push(byteArray);
+    }
+    
+    return new Blob(byteArrays, {type: contentType});
+  },
   /**
    * Common handler for OCR results
    * @param {string} text - Extracted text
@@ -1625,7 +1802,7 @@ const EventHandlers = {
     console.log('Initializing OCR tab handlers');
     const { 
       captureBtn, copyBtn, clearBtn, resultTextarea,
-      uploadImageBtn, imageFileInput, sendToAiTabBtn
+      uploadFileBtn, imageFileInput, sendToAiTabBtn, downloadPdfBtn
     } = UIManager.elements;
     
     console.log('OCR elements found:', {
@@ -1633,11 +1810,22 @@ const EventHandlers = {
       copyBtn: !!copyBtn,
       clearBtn: !!clearBtn,
       resultTextarea: !!resultTextarea,
-      uploadImageBtn: !!uploadImageBtn,
+      uploadFileBtn: !!uploadFileBtn, // Updated variable name
       imageFileInput: !!imageFileInput,
-      sendToAiTabBtn: !!sendToAiTabBtn
+      sendToAiTabBtn: !!sendToAiTabBtn,
+      downloadPdfBtn: !!downloadPdfBtn // New button
     });
     
+    if (downloadPdfBtn) {
+      console.log('Adding click listener to downloadPdfBtn');
+      downloadPdfBtn.addEventListener('click', function(event) {
+        console.log('Download PDF button clicked');
+        OCRManager.handleDownloadPdfClick.call(this, event);
+      });
+    } else {
+      console.error('downloadPdfBtn element not found');
+    }
+
     // Capture button handler
     if (captureBtn) {
       console.log('Adding click listener to captureBtn');
@@ -1683,20 +1871,20 @@ const EventHandlers = {
     }
     
     // Upload image button handler
-    if (uploadImageBtn && imageFileInput) {
-      console.log('Adding click listener to uploadImageBtn');
-      uploadImageBtn.addEventListener('click', () => {
-        console.log('Upload image button clicked');
+    if (uploadFileBtn && imageFileInput) {
+      console.log('Adding click listener to uploadFileBtn');
+      uploadFileBtn.addEventListener('click', () => {
+        console.log('Upload file button clicked');
         imageFileInput.click();
       });
       
       console.log('Adding change listener to imageFileInput');
       imageFileInput.addEventListener('change', function(event) {
-        console.log('Image file selected');
+        console.log('File selected');
         EventHandlers.handleImageUpload.call(this, event);
       });
     } else {
-      console.error('uploadImageBtn or imageFileInput elements not found');
+      console.error('uploadFileBtn or imageFileInput elements not found');
     }
     
     // Send to AI tab button handler
@@ -1719,7 +1907,7 @@ const EventHandlers = {
   initAiTabHandlers: function() {
     console.log('Initializing AI tab handlers');
     const { 
-      aiPrompt, appendExtractedTextBtn, uploadAiImageBtn, aiImageFileInput,
+      aiPrompt, appendExtractedTextBtn, uploadAiFileBtn, aiImageFileInput,
       captureAiScreenshotBtn, useOcrImageBtn, removeAiImageBtn,
       sendToAiBtn, copyAiResponseBtn, clearAiBtn
     } = UIManager.elements;
@@ -1727,7 +1915,7 @@ const EventHandlers = {
     console.log('AI elements found:', {
       aiPrompt: !!aiPrompt,
       appendExtractedTextBtn: !!appendExtractedTextBtn,
-      uploadAiImageBtn: !!uploadAiImageBtn,
+      uploadAiFileBtn: !!uploadAiFileBtn, // Updated variable name
       aiImageFileInput: !!aiImageFileInput,
       captureAiScreenshotBtn: !!captureAiScreenshotBtn,
       useOcrImageBtn: !!useOcrImageBtn,
@@ -1763,20 +1951,20 @@ const EventHandlers = {
     }
     
     // Upload AI image button handler
-    if (uploadAiImageBtn && aiImageFileInput) {
-      console.log('Adding click listener to uploadAiImageBtn');
-      uploadAiImageBtn.addEventListener('click', () => {
-        console.log('Upload AI image button clicked');
+    if (uploadAiFileBtn && aiImageFileInput) {
+      console.log('Adding click listener to uploadAiFileBtn');
+      uploadAiFileBtn.addEventListener('click', () => {
+        console.log('Upload AI file button clicked');
         aiImageFileInput.click();
       });
       
       console.log('Adding change listener to aiImageFileInput');
       aiImageFileInput.addEventListener('change', function(event) {
-        console.log('AI image file selected');
+        console.log('AI file selected');
         EventHandlers.handleAiImageUpload.call(this, event);
       });
     } else {
-      console.error('uploadAiImageBtn or aiImageFileInput elements not found');
+      console.error('uploadAiFileBtn or aiImageFileInput elements not found');
     }
     
     // Capture AI screenshot button handler
@@ -1920,7 +2108,50 @@ const EventHandlers = {
     } else {
       console.error('addOcrHeaderBtn element not found');
     }
-    
+    if (document.getElementById('customOcrPdfSupportCheckbox')) {
+      document.getElementById('customOcrPdfSupportCheckbox').addEventListener('change', function() {
+        // If PDF support is enabled, force Form Data format
+        if (this.checked) {
+          const formDataRadio = document.querySelector('input[name="customOcrFileFormat"][value="formData"]');
+          if (formDataRadio) {
+            formDataRadio.checked = true;
+            // Disable the base64 option
+            const base64Radio = document.querySelector('input[name="customOcrFileFormat"][value="base64"]');
+            if (base64Radio) {
+              base64Radio.disabled = true;
+            }
+          }
+        } else {
+          // Re-enable the base64 option
+          const base64Radio = document.querySelector('input[name="customOcrFileFormat"][value="base64"]');
+          if (base64Radio) {
+            base64Radio.disabled = false;
+          }
+        }
+      });
+    }
+    document.querySelectorAll('input[name="customOcrFileFormat"]').forEach(radio => {
+      radio.addEventListener('change', function() {
+        const pdfSupportCheckbox = document.getElementById('customOcrPdfSupportCheckbox');
+        if (pdfSupportCheckbox && this.value === 'base64' && pdfSupportCheckbox.checked) {
+          // Prevent selecting base64 when PDF support is enabled
+          const formDataRadio = document.querySelector('input[name="customOcrFileFormat"][value="formData"]');
+          if (formDataRadio) {
+            formDataRadio.checked = true;
+            alert('Base64 format cannot be used with PDF support. Using Form Data instead.');
+          }
+        }
+      });
+    });
+    document.querySelectorAll('input[name="customOcrResponseType"]').forEach(radio => {
+      radio.addEventListener('change', function() {
+        const responsePathInput = document.getElementById('customOcrResponsePathInput');
+        if (responsePathInput) {
+          // Only show response path input for JSON responses
+          responsePathInput.parentElement.style.display = this.value === 'json' ? 'flex' : 'none';
+        }
+      });
+    });
     // Custom OCR settings save button handler
     if (saveCustomOcrBtn) {
       console.log('Adding click listener to saveCustomOcrBtn');
@@ -2056,6 +2287,12 @@ const EventHandlers = {
         return true;
       }
       
+      if (request.action === 'pdfComplete') {
+        OCRManager.handlePdfResult(request.pdfData);
+        sendResponse({status: 'ok'});
+        return true;
+      }
+
       if (request.action === 'aiComplete') {
         AIManager.handleAiResponse(request.result);
         sendResponse({status: 'ok'});
@@ -2163,49 +2400,52 @@ const EventHandlers = {
   /**
    * Handle clear button click
    */
-  // In popup.js - Update handleClearClick function
-handleClearClick: function() {
-  const { resultTextarea, copyBtn, clearBtn, sendToAiBtn, sendToAiTabBtn, previewContainer, aiResponseContainer, aiResponseDiv, useOcrImageBtn } = UIManager.elements;
-  
-  // Update UI elements
-  if (resultTextarea) resultTextarea.value = 'No text extracted yet.';
-  if (copyBtn) copyBtn.disabled = true;
-  if (clearBtn) clearBtn.disabled = true;
-  if (sendToAiBtn) sendToAiBtn.disabled = true;
-  if (sendToAiTabBtn) sendToAiTabBtn.disabled = true;
-  
-  // Hide preview containers
-  UIManager.showElement(previewContainer, false);
-  UIManager.showElement(aiResponseContainer, false);
-  
-  // Clear AI response from the DOM
-  if (aiResponseDiv) {
-    aiResponseDiv.innerHTML = '';
-  }
-  
-  // Use Promise.all to ensure all storage operations complete
-  Promise.all([
-    // Remove stored data
-    StorageManager.remove(['extractedText']),
-    StorageManager.remove(['pendingScreenshot']),
-    StorageManager.remove(['previewImage']),
-    StorageManager.remove(['aiResponse'])
-  ]).then(() => {
-    console.log('All data successfully cleared');
-    UIManager.updateStatus('Cleared!', 'success');
+  handleClearClick: function() {
+    const { resultTextarea, copyBtn, clearBtn, sendToAiBtn, sendToAiTabBtn, previewContainer, aiResponseContainer, aiResponseDiv, useOcrImageBtn, downloadPdfBtn } = UIManager.elements;
     
-    // Reset the OCR image
-    OCRManager.currentOcrImage = null;
+    // Update UI elements
+    if (resultTextarea) resultTextarea.value = 'No text extracted yet.';
+    if (copyBtn) copyBtn.disabled = true;
+    if (clearBtn) clearBtn.disabled = true;
+    if (sendToAiBtn) sendToAiBtn.disabled = true;
+    if (sendToAiTabBtn) sendToAiTabBtn.disabled = true;
+    if (downloadPdfBtn) UIManager.showElement(downloadPdfBtn, false);
     
-    // Disable the "Use OCR Image" button in the AI tab
-    if (useOcrImageBtn) {
-      useOcrImageBtn.disabled = true;
+    // Hide preview containers
+    UIManager.showElement(previewContainer, false);
+    UIManager.showElement(aiResponseContainer, false);
+    
+    // Clear AI response from the DOM
+    if (aiResponseDiv) {
+      aiResponseDiv.innerHTML = '';
     }
-  }).catch(error => {
-    console.error('Error during clear operation:', error);
-    UIManager.updateStatus('Error clearing data: ' + (error ? error.message : 'Unknown error'), 'error');
-  });
-},
+    
+    // Use Promise.all to ensure all storage operations complete
+    Promise.all([
+      // Remove stored data
+      StorageManager.remove(['extractedText']),
+      StorageManager.remove(['pendingScreenshot']),
+      StorageManager.remove(['previewImage']),
+      StorageManager.remove(['aiResponse']),
+      StorageManager.remove(['processedPdf']),
+      StorageManager.remove(['pdfProcessingComplete']),
+      StorageManager.remove(['pdfProcessingTimestamp'])
+    ]).then(() => {
+      console.log('All data successfully cleared');
+      UIManager.updateStatus('Cleared!', 'success');
+      
+      // Reset the OCR image
+      OCRManager.currentOcrImage = null;
+      
+      // Disable the "Use OCR Image" button in the AI tab
+      if (useOcrImageBtn) {
+        useOcrImageBtn.disabled = true;
+      }
+    }).catch(error => {
+      console.error('Error during clear operation:', error);
+      UIManager.updateStatus('Error clearing data: ' + (error ? error.message : 'Unknown error'), 'error');
+    });
+  },
   
   /**
    * Handle result textarea change
@@ -2232,11 +2472,27 @@ handleClearClick: function() {
   handleImageUpload: function() {
     if (this.files && this.files[0]) {
       const file = this.files[0];
-      const reader = new FileReader();
+      const fileName = file.name || '';
+      const fileType = file.type || '';
+      const isPdf = fileName.toLowerCase().endsWith('.pdf') || fileType === 'application/pdf';
       
       // Show loading
       UIManager.showElement(UIManager.elements.loadingDiv, true);
+      
+      if (isPdf) {
+        UIManager.updateStatus('Processing PDF file...', '');
+        
+        // Hide preview container since we can't preview PDFs easily
+        UIManager.showElement(UIManager.elements.previewContainer, false);
+        
+        // Process PDF directly with OCR
+        OCRManager.processPdfWithSelectedService(file);
+        return;
+      }
+      
+      // Handle images as before
       UIManager.updateStatus('Reading uploaded image...', '');
+      const reader = new FileReader();
       
       reader.onload = function(e) {
         const imageDataUrl = e.target.result;
@@ -2342,6 +2598,16 @@ handleClearClick: function() {
   handleAiImageUpload: function() {
     if (this.files && this.files[0]) {
       const file = this.files[0];
+      const fileName = file.name || '';
+      const fileType = file.type || '';
+      const isPdf = fileName.toLowerCase().endsWith('.pdf') || fileType === 'application/pdf';
+      
+      if (isPdf) {
+        UIManager.updateStatus('PDF files are not supported for AI prompts yet.', 'error');
+        return;
+      }
+      
+      // Handle images as before
       const reader = new FileReader();
       
       reader.onload = function(e) {
@@ -2606,7 +2872,8 @@ handleClearClick: function() {
   handleSaveCustomOcrClick: function() {
     const { 
       customOcrUrlInput, customOcrParamNameInput, customOcrResponsePathInput,
-      customOcrImageFormatRadios, customOcrHeadersList
+      customOcrFileFormatRadios, customOcrHeadersList, customOcrPdfSupportCheckbox,
+      customOcrResponseTypeRadios
     } = UIManager.elements;
     
     const url = customOcrUrlInput ? customOcrUrlInput.value.trim() : '';
@@ -2624,19 +2891,32 @@ handleClearClick: function() {
     }
     
     // Get selected image format
-    const imageFormatRadio = document.querySelector('input[name="customOcrImageFormat"]:checked');
-    const imageFormat = imageFormatRadio ? imageFormatRadio.value : 'base64';
+    const fileFormatRadio = document.querySelector('input[name="customOcrFileFormat"]:checked');
+    const fileFormat = fileFormatRadio ? fileFormatRadio.value : 'base64';
+    
+    // Get PDF support setting
+    const pdfSupport = customOcrPdfSupportCheckbox ? customOcrPdfSupportCheckbox.checked : false;
+    
+    // If PDF support is enabled, ensure form data is selected
+    if (pdfSupport && fileFormat !== 'formData') {
+      UIManager.updateStatus('PDF support requires Form Data format', 'error');
+      return;
+    }
+    
+    // Get response type
+    const responseTypeRadio = document.querySelector('input[name="customOcrResponseType"]:checked');
+    const responseType = responseTypeRadio ? responseTypeRadio.value : 'json';
     
     // Get param name
     const paramName = customOcrParamNameInput ? customOcrParamNameInput.value.trim() : '';
     if (!paramName) {
-      UIManager.updateStatus('Please enter a parameter name for the image', 'error');
+      UIManager.updateStatus('Please enter a parameter name for the file data', 'error');
       return;
     }
     
-    // Get response path
+    // Get response path (only required for JSON responses)
     const responsePath = customOcrResponsePathInput ? customOcrResponsePathInput.value.trim() : '';
-    if (!responsePath) {
+    if (responseType === 'json' && !responsePath) {
       UIManager.updateStatus('Please enter a response path to extract text', 'error');
       return;
     }
@@ -2647,9 +2927,11 @@ handleClearClick: function() {
     // Save custom OCR settings
     const customOcrSettings = {
       url,
-      imageFormat,
+      fileFormat,
       paramName,
       responsePath,
+      responseType,
+      pdfSupport,
       headers
     };
     
@@ -3066,19 +3348,42 @@ function loadSettings() {
     
     // Load custom OCR settings if saved
     if (result.customOcrSettings && UIManager.elements.customOcrUrlInput) {
-      const customOcr = result.customOcrSettings;
-      
-      UIManager.elements.customOcrUrlInput.value = customOcr.url || '';
-      UIManager.elements.customOcrParamNameInput.value = customOcr.paramName || '';
-      UIManager.elements.customOcrResponsePathInput.value = customOcr.responsePath || '';
-      
-      // Set image format radio
-      const formatRadio = document.querySelector(`input[name="customOcrImageFormat"][value="${customOcr.imageFormat || 'base64'}"]`);
-      if (formatRadio) formatRadio.checked = true;
-      
-      // Populate headers list
-      UIManager.populateHeadersList(UIManager.elements.customOcrHeadersList, customOcr.headers);
+  const customOcr = result.customOcrSettings;
+  
+  UIManager.elements.customOcrUrlInput.value = customOcr.url || '';
+  UIManager.elements.customOcrParamNameInput.value = customOcr.paramName || '';
+  UIManager.elements.customOcrResponsePathInput.value = customOcr.responsePath || '';
+  
+  // Set file format radio
+  const formatRadio = document.querySelector(`input[name="customOcrFileFormat"][value="${customOcr.fileFormat || 'base64'}"]`);
+  if (formatRadio) formatRadio.checked = true;
+  
+  // Set PDF support checkbox
+  if (UIManager.elements.customOcrPdfSupportCheckbox) {
+    UIManager.elements.customOcrPdfSupportCheckbox.checked = customOcr.pdfSupport === true;
+    
+    // If PDF support is enabled, disable base64 option
+    if (customOcr.pdfSupport === true) {
+      const base64Radio = document.querySelector('input[name="customOcrFileFormat"][value="base64"]');
+      if (base64Radio) {
+        base64Radio.disabled = true;
+      }
     }
+  }
+  
+  // Set response type radio
+  const responseTypeRadio = document.querySelector(`input[name="customOcrResponseType"][value="${customOcr.responseType || 'json'}"]`);
+  if (responseTypeRadio) responseTypeRadio.checked = true;
+  
+  // Show/hide response path input based on response type
+  const responsePathInput = document.getElementById('customOcrResponsePathInput');
+  if (responsePathInput) {
+    responsePathInput.parentElement.style.display = (customOcr.responseType || 'json') === 'json' ? 'flex' : 'none';
+  }
+  
+  // Populate headers list
+  UIManager.populateHeadersList(UIManager.elements.customOcrHeadersList, customOcr.headers);
+}
     
     // Load OpenAI settings if saved
     if (result.openaiSettings && UIManager.elements.openaiApiKeyInput) {
@@ -3165,7 +3470,41 @@ function loadSettings() {
     console.error('Error loading results:', error);
   });
 }
-
+function checkForCompletedPdfProcessing() {
+  console.log('Checking for completed PDF processing');
+  
+  StorageManager.get(['pdfProcessingComplete', 'processedPdf', 'extractedText']).then(result => {
+    const pdfProcessingComplete = result.pdfProcessingComplete === true;
+    const hasProcessedPdf = !!result.processedPdf;
+    
+    console.log('PDF processing complete:', pdfProcessingComplete);
+    console.log('Has processed PDF:', hasProcessedPdf);
+    
+    if (pdfProcessingComplete && hasProcessedPdf) {
+      console.log('Found completed PDF processing');
+      
+      // Update UI to show PDF download option
+      const { resultTextarea, copyBtn, clearBtn, downloadPdfBtn, sendToAiTabBtn } = UIManager.elements;
+      
+      // Update textarea with the status message
+      if (resultTextarea) {
+        resultTextarea.value = result.extractedText || "PDF processed successfully. You can download the searchable PDF.";
+      }
+      
+      // Show the download button
+      UIManager.showElement(downloadPdfBtn, true);
+      
+      // Update button states
+      if (copyBtn) copyBtn.disabled = true; // Can't copy PDF content
+      if (clearBtn) clearBtn.disabled = false;
+      if (sendToAiTabBtn) sendToAiTabBtn.disabled = true; // Can't send PDF to AI tab yet
+      
+      UIManager.updateStatus('PDF processing has completed!', 'success');
+    }
+  }).catch(error => {
+    console.error('Error checking for PDF processing:', error);
+  });
+}
 function cleanupStorage() {
   console.log('Running storage cleanup');
   
@@ -3421,6 +3760,16 @@ function initializePopup() {
               requestId: response.requestId
             });
           } 
+          else if (response.status === 'pdfComplete') {
+            UIManager.updateStatus('PDF processing completed while popup was closed!', 'success');
+            OCRManager.handlePdfResult(response.pdfData);
+            
+            // Acknowledge the result
+            browserAPI.runtime.sendMessage({
+              action: 'acknowledgeResult',
+              requestId: response.requestId
+            });
+          }
           else if (response.status === 'aiComplete') {
             UIManager.updateStatus('AI processing completed while popup was closed!', 'success');
             AIManager.handleAiResponse(response.result);
@@ -3483,6 +3832,7 @@ function initializePopup() {
   // Check if we have a pending screenshot to process
   checkPendingScreenshot();
   checkPendingResults();
+  checkForCompletedPdfProcessing();
   console.log('Popup initialization complete');
 }
 

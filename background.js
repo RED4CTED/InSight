@@ -599,15 +599,20 @@ function processAIRequest(requestId) {
 // Notification functions
 function notifyOCRComplete(requestId, result) {
   console.log(`[Background] Notifying OCR complete for ${requestId}`);
+  
+  // Ensure result is a string
+  const textResult = result !== null && result !== undefined ? String(result) : "";
+  
   browserAPI.runtime.sendMessage({
     action: 'ocrComplete',
     requestId: requestId,
-    result: result
+    result: textResult
   }).catch(error => {
     // Expected to fail if popup is closed
     console.log(`[Background] Could not notify popup about OCR completion: ${error.message}`);
   });
 }
+
 
 function notifyAIComplete(requestId, result) {
   console.log(`[Background] Notifying AI complete for ${requestId}`);
@@ -859,6 +864,10 @@ browserAPI.runtime.onMessage.addListener(function(request, sender, sendResponse)
     return handleOCRRequest(request, sender, sendResponse);
   }
   
+  if (request.action === 'processPDF') {
+    return handlePDFRequest(request, sender, sendResponse);
+  }
+
   // Handle AI processing request
   if (request.action === 'processAI') {
     return handleAIRequest(request, sender, sendResponse);
@@ -907,7 +916,11 @@ browserAPI.runtime.onMessage.addListener(function(request, sender, sendResponse)
       const completedOCR = requestKeys
         .find(key => allData[key].type === 'ocr' && 
                     allData[key].status === 'completed');
-                    
+      
+      const completedPDF = requestKeys
+      .find(key => allData[key].type === 'pdf' && 
+                    allData[key].status === 'completed');
+                  
       const completedAI = requestKeys
         .find(key => allData[key].type === 'ai' && 
                     allData[key].status === 'completed');
@@ -924,17 +937,33 @@ browserAPI.runtime.onMessage.addListener(function(request, sender, sendResponse)
         });
       } else if (completedOCR) {
         const ocrData = allData[completedOCR];
+        // Ensure the result is a string before sending
+        const textResult = ocrData.result !== null && ocrData.result !== undefined ? 
+                           String(ocrData.result) : ""; 
+        
         sendResponse({
           status: 'ocrComplete', 
-          result: ocrData.result,
+          result: textResult,
           requestId: completedOCR.replace('request_', '')
         });
       } else if (completedAI) {
         const aiData = allData[completedAI];
+        // Ensure the result is a string before sending
+        const textResult = aiData.result !== null && aiData.result !== undefined ? 
+                           String(aiData.result) : "";
         sendResponse({
           status: 'aiComplete', 
-          result: aiData.result,
+          result: textResult,
           requestId: completedAI.replace('request_', '')
+        });
+        
+      } else if (completedPDF) {
+        const pdfData = allData[completedPDF];
+        sendResponse({
+          status: 'pdfComplete', 
+          result: pdfData.result,
+          pdfData: allData.processedPdf || null,
+          requestId: completedPDF.replace('request_', '')
         });
       } else {
         // Check for in-progress requests
@@ -1025,6 +1054,297 @@ browserAPI.runtime.onMessage.addListener(function(request, sender, sendResponse)
   
   return true; // Keep the messaging channel open
 });
+
+function handlePDFRequest(request, sender, sendResponse) {
+  const requestId = 'pdf_' + Date.now();
+  console.log(`[Background] Handling PDF request ${requestId}`);
+  
+  // Get PDF data and settings from the request
+  const pdfData = request.pdfData; // This is now base64 data
+  const settings = request.settings;
+  const fileName = request.fileName || 'document.pdf';
+  
+  if (!pdfData || !settings) {
+    console.error('[Background] Missing PDF data or settings');
+    sendResponse({status: 'error', error: 'Missing PDF data or settings'});
+    return true;
+  }
+  
+  // Store request details
+  saveRequest(requestId, {
+    type: 'pdf',
+    service: 'custom',
+    fileName: fileName,
+    fileType: request.fileType || 'application/pdf',
+    fileSize: request.fileSize || 0,
+    params: {
+      settings: settings
+    }
+  }).then(() => {
+    // Start processing
+    processPDFRequest(requestId, pdfData, fileName, settings);
+    
+    // Send immediate response
+    sendResponse({status: 'processing', requestId: requestId});
+  }).catch(error => {
+    console.error('[Background] Error saving PDF request:', error);
+    sendResponse({status: 'error', error: error.message});
+  });
+  
+  return true; // Keep message channel open
+}
+
+// Add function to process PDF requests
+function processPDFRequest(requestId, pdfData, fileName, settings) {
+  console.log(`[Background] Processing PDF request ${requestId}`);
+  
+  // Mark as processing
+  updateRequest(requestId, {status: 'processing'})
+    .then(() => {
+      // Track this request as active
+      activeRequests[requestId] = true;
+      
+      // Process the PDF
+      return sendPDFToCustomApi(pdfData, fileName, settings)
+        .then(result => {
+          console.log(`[Background] PDF request ${requestId} completed successfully`);
+          
+          // Ensure we have a proper response
+          let responseText = "";
+          let responsePdf = null;
+          
+          if (typeof result === 'object') {
+            responseText = result.text || "PDF processed successfully.";
+            responsePdf = result.pdfData || null;
+          } else if (typeof result === 'string') {
+            responseText = result || "PDF processed successfully.";
+          } else {
+            responseText = "PDF processed successfully.";
+          }
+          
+          // Store result with a new persistent flag
+          return browserAPI.storage.local.set({
+            extractedText: responseText,
+            processedPdf: responsePdf,
+            // Add a new flag to indicate PDF processing is complete
+            pdfProcessingComplete: true,
+            pdfProcessingTimestamp: Date.now(),
+            [`request_${requestId}`]: {
+              type: 'pdf',
+              service: 'custom',
+              status: 'completed',
+              result: { 
+                text: responseText,
+                hasPdf: !!responsePdf
+              },
+              completedAt: Date.now()
+            }
+          }).then(() => {
+            delete activeRequests[requestId];
+            
+            // Determine if we have PDF data or just text
+            if (responsePdf) {
+              notifyPdfComplete(requestId, responsePdf);
+            } else {
+              notifyOCRComplete(requestId, responseText);
+            }
+            
+            return result;
+          });
+        })
+        .catch(error => {
+          console.error(`[Background] PDF request ${requestId} failed:`, error);
+          
+          // Store error
+          return updateRequest(requestId, {
+            status: 'error',
+            error: error.message || 'Unknown error',
+            completedAt: Date.now()
+          }).then(() => {
+            delete activeRequests[requestId];
+            notifyError(requestId, error.message || 'Unknown error');
+          });
+        });
+    })
+    .catch(error => {
+      console.error(`[Background] Error processing PDF request ${requestId}:`, error);
+      delete activeRequests[requestId];
+    });
+}
+
+// Function to send PDF to custom API
+function sendPDFToCustomApi(pdfData, fileName, settings) {
+  console.log('[Background] Sending PDF to custom API at:', settings.url);
+  
+  // Convert base64 data to Blob if it's in base64 format
+  let pdfBlob;
+  
+  // If it's a data URL, extract the base64 part
+  if (pdfData.startsWith('data:')) {
+    const base64String = pdfData.split(',')[1];
+    const mimeType = pdfData.split(',')[0].split(':')[1].split(';')[0];
+    
+    // Convert base64 to Blob
+    const byteCharacters = atob(base64String);
+    const byteArrays = [];
+    
+    for (let offset = 0; offset < byteCharacters.length; offset += 512) {
+      const slice = byteCharacters.slice(offset, offset + 512);
+      
+      const byteNumbers = new Array(slice.length);
+      for (let i = 0; i < slice.length; i++) {
+        byteNumbers[i] = slice.charCodeAt(i);
+      }
+      
+      const byteArray = new Uint8Array(byteNumbers);
+      byteArrays.push(byteArray);
+    }
+    
+    pdfBlob = new Blob(byteArrays, {type: mimeType || 'application/pdf'});
+  } else if (typeof pdfData === 'string') {
+    // Assume it's already base64 without data URL prefix
+    const byteCharacters = atob(pdfData);
+    const byteArrays = [];
+    
+    for (let offset = 0; offset < byteCharacters.length; offset += 512) {
+      const slice = byteCharacters.slice(offset, offset + 512);
+      
+      const byteNumbers = new Array(slice.length);
+      for (let i = 0; i < slice.length; i++) {
+        byteNumbers[i] = slice.charCodeAt(i);
+      }
+      
+      const byteArray = new Uint8Array(byteNumbers);
+      byteArrays.push(byteArray);
+    }
+    
+    pdfBlob = new Blob(byteArrays, {type: 'application/pdf'});
+  } else {
+    // Not a valid format
+    return Promise.reject(new Error('Invalid PDF data format'));
+  }
+  
+  // For PDFs, we'll always use FormData
+  const formData = new FormData();
+  formData.append(settings.paramName || 'file', pdfBlob, fileName);
+  
+  // Prepare headers (but don't set Content-Type, let browser handle it for FormData)
+  const headers = { ...settings.headers };
+  delete headers['Content-Type'];
+  
+  // Make the API request
+  return fetch(settings.url, {
+    method: 'POST',
+    headers: headers,
+    body: formData
+  })
+  .then(response => {
+    console.log('[Background] Custom API response status:', response.status);
+    
+    if (!response.ok) {
+      throw new Error('Custom API returned status ' + response.status);
+    }
+    
+    // Check content type to determine if we got a PDF or JSON
+    const contentType = response.headers.get('Content-Type') || '';
+    
+    if (contentType.includes('application/pdf')) {
+      // We received a PDF file, return it as base64
+      return response.arrayBuffer().then(buffer => {
+        // Convert to base64
+        const base64 = arrayBufferToBase64(buffer);
+        return {
+          text: "PDF processed successfully. You can download the searchable PDF.",
+          pdfData: base64
+        };
+      });
+    } else {
+      // Assume JSON response with text
+      return response.json().then(data => {
+        console.log('[Background] Received JSON response:', data);
+        
+        // Extract text using the response path
+        const pathParts = settings.responsePath.split('.');
+        let result = data;
+        
+        for (const part of pathParts) {
+          if (result === null || result === undefined) {
+            break;
+          }
+          
+          // Handle array indexing (e.g., results[0])
+          const arrayMatch = part.match(/^([^\[]+)\[(\d+)\]$/);
+          if (arrayMatch) {
+            const arrayName = arrayMatch[1];
+            const arrayIndex = parseInt(arrayMatch[2]);
+            
+            if (result[arrayName] && Array.isArray(result[arrayName]) && result[arrayName].length > arrayIndex) {
+              result = result[arrayName][arrayIndex];
+            } else {
+              result = null;
+              break;
+            }
+          } else {
+            result = result[part];
+          }
+        }
+        
+        // Ensure result is a string before applying trim()
+        let textResult = "No text detected in PDF.";
+        
+        if (result !== null && result !== undefined) {
+          // Convert to string safely
+          textResult = String(result);
+          // Now it's safe to trim
+          textResult = textResult.trim() || "No text detected in PDF.";
+        }
+        
+        return {
+          text: textResult,
+          pdfData: null
+        };
+      }).catch(error => {
+        console.error('[Background] Error parsing JSON response:', error);
+        
+        // Try to treat it as plain text
+        return response.text().then(text => {
+          // Ensure text is a string
+          const textResult = typeof text === 'string' ? text.trim() : "PDF processed but no text was returned.";
+          return {
+            text: textResult,
+            pdfData: null
+          };
+        });
+      });
+    }
+  });
+}
+
+// Helper function to convert ArrayBuffer to base64
+function arrayBufferToBase64(buffer) {
+  let binary = '';
+  const bytes = new Uint8Array(buffer);
+  const len = bytes.byteLength;
+  
+  for (let i = 0; i < len; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  
+  return btoa(binary);
+}
+
+// Add notification function for PDF completion
+function notifyPdfComplete(requestId, pdfData) {
+  console.log(`[Background] Notifying PDF complete for ${requestId}`);
+  browserAPI.runtime.sendMessage({
+    action: 'pdfComplete',
+    requestId: requestId,
+    pdfData: pdfData
+  }).catch(error => {
+    // Expected to fail if popup is closed
+    console.log(`[Background] Could not notify popup about PDF completion: ${error.message}`);
+  });
+}
 
 // Common capture processing function
 function processCapture(dataUrl, request, sendResponse) {

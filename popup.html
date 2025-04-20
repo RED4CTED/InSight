@@ -71,7 +71,7 @@
             </button>
             
             <div class="upload-button-container">
-              <button id="uploadImageBtn" class="action-button secondary">
+              <button id="uploadFileBtn" class="action-button secondary">
                 <span class="button-icon">
                   <svg xmlns="https://www.w3.org/TR/SVG2/" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
@@ -79,9 +79,9 @@
                     <line x1="12" y1="3" x2="12" y2="15"></line>
                   </svg>
                 </span>
-                Upload Image
+                Upload File
               </button>
-              <input type="file" id="imageFileInput" accept="image/*" class="hidden">
+              <input type="file" id="imageFileInput" accept="image/*,.pdf" class="hidden">
             </div>
           </div>
           
@@ -124,6 +124,17 @@
               Clear
             </button>
             
+            <button id="downloadPdfBtn" class="action-button hidden">
+              <span class="button-icon">
+                <svg xmlns="https://www.w3.org/TR/SVG2/" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                  <polyline points="17 8 12 3 7 8"></polyline>
+                  <line x1="12" y1="3" x2="12" y2="15"></line>
+                </svg>
+              </span>
+              Download PDF
+            </button>
+
             <button id="sendToAiTabBtn" class="action-button" disabled>
               <span class="button-icon">
                 <svg xmlns="https://www.w3.org/TR/SVG2/" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -157,10 +168,10 @@
             </button>
           </div>
           
-          <h3>Add Image (Optional)</h3>
+          <h3>Add File (Image/PDF)</h3>
           <div class="button-row">
             <div class="upload-button-container">
-              <button id="uploadAiImageBtn" class="action-button secondary">
+              <button id="uploadAiFileBtn" class="action-button secondary">
                 <span class="button-icon">
                   <svg xmlns="https://www.w3.org/TR/SVG2/" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
@@ -168,9 +179,9 @@
                     <polyline points="21 15 16 10 5 21"></polyline>
                   </svg>
                 </span>
-                Upload Image
+                Upload File
               </button>
-              <input type="file" id="aiImageFileInput" accept="image/*" class="hidden">
+              <input type="file" id="aiImageFileInput" accept="image/*,.pdf" class="hidden">
             </div>
             
             <button id="captureAiScreenshotBtn" class="action-button secondary">
@@ -286,24 +297,43 @@
             <div id="customOcrHeadersList" class="headers-list">
               <!-- Headers will be added here dynamically -->
             </div>
-            <h4>Image Format</h4>
+            <h4>File Format</h4>
             <div class="radio-group">
               <label class="radio-option">
-                <input type="radio" name="customOcrImageFormat" value="base64" checked> 
-                Base64 string
+                <input type="radio" name="customOcrFileFormat" value="base64" checked> 
+                Base64 string (for images)
               </label>
               <label class="radio-option">
-                <input type="radio" name="customOcrImageFormat" value="formData"> 
-                Form Data
+                <input type="radio" name="customOcrFileFormat" value="formData"> 
+                Form Data (for images and PDFs)
               </label>
             </div>
             <div class="input-group">
               <input type="text" id="customOcrParamNameInput" placeholder="Form data parameter name or JSON field name">
             </div>
+            <h4>PDF Support</h4>
+            <div class="checkbox-group">
+              <label class="checkbox-option">
+                <input type="checkbox" id="customOcrPdfSupportCheckbox"> 
+                Enable PDF processing (requires Form Data format)
+              </label>
+            </div>
+            
             <h4>Response Format</h4>
+            <div class="radio-group">
+              <label class="radio-option">
+                <input type="radio" name="customOcrResponseType" value="json" checked> 
+                JSON response (extract text from path)
+              </label>
+              <label class="radio-option">
+                <input type="radio" name="customOcrResponseType" value="pdf"> 
+                PDF response (for processed PDFs)
+              </label>
+            </div>
             <div class="input-group">
               <input type="text" id="customOcrResponsePathInput" placeholder="JSON path to text (e.g., results.text)">
             </div>
+            
             <div class="button-row">
               <button id="saveCustomOcrBtn" class="action-button secondary">Save OCR Settings</button>
               <button id="testCustomOcrBtn" class="action-button">Test</button>

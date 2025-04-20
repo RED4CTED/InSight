@@ -668,3 +668,53 @@ textarea,
 .result-container {
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
+/* Checkbox styling */
+.checkbox-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.checkbox-option {
+  display: flex;
+  align-items: center;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.checkbox-option input {
+  margin-right: 6px;
+}
+
+/* Download PDF button */
+#downloadPdfBtn {
+  background-color: #34a853;
+  color: white;
+}
+
+#downloadPdfBtn:hover {
+  background-color: #2d9249;
+}
+
+/* Dark mode styling */
+@media (prefers-color-scheme: dark) {
+  .checkbox-option {
+    color: #e8eaed;
+  }
+  
+  #downloadPdfBtn {
+    background-color: #34a853;
+    color: white;
+  }
+  
+  #downloadPdfBtn:hover {
+    background-color: #2d9249;
+  }
+  
+  input[type="checkbox"]:disabled, 
+  input[type="radio"]:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+}
