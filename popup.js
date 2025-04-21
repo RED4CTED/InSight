@@ -2973,7 +2973,7 @@ const EventHandlers = {
         // Test with the current preview image
         const customOcrSettings = {
           url,
-          imageFormat,
+          fileFormat,
           paramName,
           responsePath,
           headers

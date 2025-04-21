@@ -118,8 +118,10 @@ function extractTextWithCustomApi(imageData, settings) {
   
   // Prepare request body based on image format
   let requestBody;
+
+  const requestHeaders = {...headers};
   
-  if (settings.imageFormat === 'base64') {
+  if (settings.fileFormat === 'base64') {
     // Use base64 string directly
     const base64Data = imageData.split(',')[1];
     
@@ -128,6 +130,9 @@ function extractTextWithCustomApi(imageData, settings) {
     bodyObj[settings.paramName] = base64Data;
     
     requestBody = JSON.stringify(bodyObj);
+    
+    // Ensure Content-Type is set for JSON
+    requestHeaders['Content-Type'] = 'application/json';
   } else {
     // Use FormData
     const byteString = atob(imageData.split(',')[1]);
@@ -141,12 +146,10 @@ function extractTextWithCustomApi(imageData, settings) {
     
     const blob = new Blob([arrayBuffer], {type: mimeType});
     
-    // Create FormData
     const formData = new FormData();
     formData.append(settings.paramName, blob, 'screenshot.png');
     
-    // Don't set Content-Type header for FormData, browser will set it with boundary
-    delete headers['Content-Type'];
+    delete requestHeaders['Content-Type'];
     
     requestBody = formData;
   }
@@ -154,7 +157,7 @@ function extractTextWithCustomApi(imageData, settings) {
   // Make the API request
   return fetch(settings.url, {
     method: 'POST',
-    headers: headers,
+    headers: requestHeaders,
     body: requestBody
   })
   .then(response => {
