@@ -1,13 +1,12 @@
 {
   "manifest_version": 3,
   "name": "InSight",
-  "version": "0.0.21",
+  "version": "0.0.22",
   "description": "Customizable API Client for OCR and AI",
   "permissions": [
     "activeTab",
     "scripting",
     "storage",
-    "tabs",
     "notifications",
     "alarms"
   ],
